@@ -1,0 +1,197 @@
+//
+//  PAMGuardRunHelpView.swift
+//  PAMFlow
+//
+//  Created by Dory on 03/07/2026.
+//
+
+import AppKit
+import SwiftUI
+
+struct PAMGuardRunHelpView: View {
+    let onShowPamguardFolder: (() -> Void)?
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(Strings.PAMGuardSetup.helpTitle)
+                    .font(Fonts.screenTitle)
+
+                Spacer()
+
+                if let onShowPamguardFolder {
+                    Button(Strings.PAMGuardSetup.showInFinder, action: onShowPamguardFolder)
+                        .buttonStyle(.primaryAction)
+                }
+
+                Button(Strings.Common.close, action: onClose)
+                    .buttonStyle(.secondaryAction)
+            }
+            .padding(Spacing.large)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.large) {
+                    ForEach(Self.steps) { step in
+                        PAMGuardHelpStepView(step: step)
+                    }
+                }
+                .padding(.horizontal, Spacing.large)
+                .padding(.bottom, Spacing.large)
+            }
+        }
+        .frame(minWidth: 720, idealWidth: 860, minHeight: 620, idealHeight: 760)
+        .background(AppColors.background)
+    }
+}
+
+private struct PAMGuardHelpStepView: View {
+    let step: PAMGuardHelpStep
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
+                Text("\(step.number).")
+                    .font(Fonts.subtitle.bold())
+                    .foregroundStyle(.tint)
+                    .frame(width: 28, alignment: .trailing)
+
+                Text(step.title)
+                    .font(Fonts.subtitle.bold())
+            }
+
+            if let detail = step.detail {
+                Text(detail)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 40)
+            }
+
+            if let link = step.link {
+                Link(link.title, destination: link.url)
+                    .padding(.leading, 40)
+            }
+
+            ForEach(step.images, id: \.self) { imageName in
+                PAMGuardHelpImage(name: imageName)
+                    .padding(.leading, 40)
+            }
+        }
+    }
+}
+
+private struct PAMGuardHelpImage: View {
+    private enum Assets {
+        static let imageExtension = "png"
+        static let imageSubdirectory = "PAMGuardHelp"
+    }
+
+    let name: String
+
+    var body: some View {
+        if let image = loadImage() {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.separator, lineWidth: 1)
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+        }
+    }
+
+    private func loadImage() -> NSImage? {
+        let nestedURL = Bundle.main.url(
+            forResource: name,
+            withExtension: Assets.imageExtension,
+            subdirectory: Assets.imageSubdirectory
+        )
+        let flatURL = Bundle.main.url(forResource: name, withExtension: Assets.imageExtension)
+
+        guard let url = nestedURL ?? flatURL else {
+            return nil
+        }
+
+        return NSImage(contentsOf: url)
+    }
+}
+
+private struct PAMGuardHelpStep: Identifiable {
+    let number: Int
+    let title: String
+    let detail: String?
+    let link: PAMGuardHelpLink?
+    let images: [String]
+
+    var id: Int { number }
+}
+
+private struct PAMGuardHelpLink {
+    let title: String
+    let url: URL
+}
+
+private extension PAMGuardRunHelpView {
+    static let steps: [PAMGuardHelpStep] = [
+        PAMGuardHelpStep(
+            number: 1,
+            title: Strings.PAMGuardSetup.helpDownloadStep,
+            detail: nil,
+            link: PAMGuardHelpLink(
+                title: Strings.PAMGuardSetup.helpDownloadLink,
+                url: URL(string: "https://www.pamguard.org/releases/V2_02_18.html")!
+            ),
+            images: []
+        ),
+        PAMGuardHelpStep(
+            number: 2,
+            title: Strings.PAMGuardSetup.helpStep1,
+            detail: nil,
+            link: nil,
+            images: []
+        ),
+        PAMGuardHelpStep(
+            number: 3,
+            title: Strings.PAMGuardSetup.helpStep2,
+            detail: nil,
+            link: nil,
+            images: []
+        ),
+        PAMGuardHelpStep(
+            number: 4,
+            title: Strings.PAMGuardSetup.helpStep3,
+            detail: nil,
+            link: nil,
+            images: ["database-menu", "database-selection"]
+        ),
+        PAMGuardHelpStep(
+            number: 5,
+            title: Strings.PAMGuardSetup.helpStep4,
+            detail: nil,
+            link: nil,
+            images: ["binary-menu", "binary-folder"]
+        ),
+        PAMGuardHelpStep(
+            number: 6,
+            title: Strings.PAMGuardSetup.helpStep5,
+            detail: nil,
+            link: nil,
+            images: ["sound-acquisition-menu", "sound-input-folder"]
+        ),
+        PAMGuardHelpStep(
+            number: 7,
+            title: Strings.PAMGuardSetup.helpStep6,
+            detail: nil,
+            link: nil,
+            images: []
+        ),
+        PAMGuardHelpStep(
+            number: 8,
+            title: Strings.PAMGuardSetup.helpStep7,
+            detail: nil,
+            link: nil,
+            images: []
+        )
+    ]
+}
