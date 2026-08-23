@@ -12,6 +12,8 @@ VOLUME_NAME="${VOLUME_NAME:-PAMFlow Installer}"
 MIN_FREE_SPACE_GB="${MIN_FREE_SPACE_GB:-12}"
 SIGN_IDENTITY="${SIGN_IDENTITY:-auto}"
 ALLOW_ADHOC_SIGNING="${ALLOW_ADHOC_SIGNING:-0}"
+ENABLE_APP_SANDBOX_FOR_DMG="${ENABLE_APP_SANDBOX_FOR_DMG:-0}"
+SKIP_DMG_STYLING="${SKIP_DMG_STYLING:-${CI:-0}}"
 RESIGN_APP=1
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,6 +24,32 @@ BACKGROUND_PATH="$BACKGROUND_DIR/background.png"
 DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.dmg"
 TEMP_DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.temp.dmg"
 SWIFT_MODULE_CACHE_PATH="${SWIFT_MODULE_CACHE_PATH:-/tmp/pamflow-dmg-swift-module-cache}"
+SHARKTRACK_RUNTIME_DESTINATION_NAME="SharkTrackRuntime"
+SHARKTRACK_RUNTIME_SOURCE="${SHARKTRACK_RUNTIME_SOURCE:-}"
+SHARKTRACK_SOURCE="${SHARKTRACK_SOURCE:-}"
+SHARKTRACK_VENV="${SHARKTRACK_VENV:-}"
+SHARKTRACKKIT_ROOT="${SHARKTRACKKIT_ROOT:-}"
+SHARKTRACK_RUNTIME_BUILD_DIR="${SHARKTRACK_RUNTIME_BUILD_DIR:-$ROOT_DIR/build/$SHARKTRACK_RUNTIME_DESTINATION_NAME}"
+REMOVE_SHARKTRACK_RUNTIME_AFTER_DMG="${REMOVE_SHARKTRACK_RUNTIME_AFTER_DMG:-0}"
+INSTALL_PYINSTALLER_IF_MISSING="${INSTALL_PYINSTALLER_IF_MISSING:-1}"
+INSTALL_SHARKTRACK_RUNTIME_IF_MISSING="${INSTALL_SHARKTRACK_RUNTIME_IF_MISSING:-1}"
+PYINSTALLER_PACKAGE="${PYINSTALLER_PACKAGE:-PyInstaller}"
+if [[ -z "${PACKAGE_CONTEXT:-}" ]]; then
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        PACKAGE_CONTEXT="github"
+    else
+        PACKAGE_CONTEXT="local"
+    fi
+fi
+
+if [[ -z "${PUSH_VERSION_TAG:-}" ]]; then
+    if [[ "$PACKAGE_CONTEXT" == "github" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
+        PUSH_VERSION_TAG="1"
+    else
+        PUSH_VERSION_TAG="0"
+    fi
+fi
+GENERATED_SHARKTRACK_RUNTIME_SOURCE=""
 RESOLVED_SIGN_IDENTITY=""
 
 log() {
@@ -115,6 +143,18 @@ PLIST
     /usr/libexec/PlistBuddy \
         -c 'Set :com.apple.security.cs.disable-library-validation true' \
         "$entitlements_path" >/dev/null
+}
+
+remove_app_sandbox_entitlement_if_needed() {
+    local entitlements_path="$1"
+
+    if [[ "$ENABLE_APP_SANDBOX_FOR_DMG" == "1" ]]; then
+        return 0
+    fi
+
+    /usr/libexec/PlistBuddy \
+        -c 'Delete :com.apple.security.app-sandbox' \
+        "$entitlements_path" >/dev/null 2>&1 || true
 }
 
 sign_code_path() {
@@ -234,6 +274,185 @@ try pngData.write(to: URL(fileURLWithPath: outputPath))
 SWIFT
 }
 
+find_sharktrack_runtime_source() {
+    local candidate
+    local candidates=(
+        "$ROOT_DIR/.runtime/$SHARKTRACK_RUNTIME_DESTINATION_NAME"
+        "$ROOT_DIR/build/$SHARKTRACK_RUNTIME_DESTINATION_NAME"
+        "$ROOT_DIR/build/DerivedData/SourcePackages/checkouts/SharkTrackKit/.runtime/$SHARKTRACK_RUNTIME_DESTINATION_NAME"
+    )
+
+    if [[ -n "$SHARKTRACK_RUNTIME_SOURCE" ]]; then
+        if [[ -d "$SHARKTRACK_RUNTIME_SOURCE" ]]; then
+            printf '%s\n' "$SHARKTRACK_RUNTIME_SOURCE"
+            return 0
+        fi
+
+        return 1
+    fi
+
+    for candidate in "${candidates[@]}"; do
+        if is_valid_sharktrack_runtime_source "$candidate"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+find_sharktrackkit_root() {
+    local candidate
+    local candidates=(
+        "$SHARKTRACKKIT_ROOT"
+        "$ROOT_DIR/build/DerivedData/SourcePackages/checkouts/SharkTrackKit"
+        "/Users/dory/Documents/SharkTrackKit"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if [[ -x "$candidate/BuildSupport/build_runner.sh" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+default_installed_sharktrack_runtime() {
+    printf '%s\n' "$HOME/Library/Application Support/SharkTrackKit/runtimes/runtime-0.1.6"
+}
+
+resolve_sharktrack_build_inputs() {
+    local sharktrackkit_root="$1"
+    local installed_runtime
+    installed_runtime="$(default_installed_sharktrack_runtime)"
+
+    if [[ -z "$SHARKTRACK_SOURCE" && ! -d "$installed_runtime/SharkTrack" && "$INSTALL_SHARKTRACK_RUNTIME_IF_MISSING" == "1" ]]; then
+        log "Installing SharkTrack development runtime for packaging"
+        "$sharktrackkit_root/scripts/install_runtime.sh"
+    fi
+
+    if [[ -z "$SHARKTRACK_SOURCE" && -d "$installed_runtime/SharkTrack" ]]; then
+        SHARKTRACK_SOURCE="$installed_runtime/SharkTrack"
+    fi
+
+    if [[ -z "$SHARKTRACK_VENV" && -x "$installed_runtime/.venv/bin/python" ]]; then
+        SHARKTRACK_VENV="$installed_runtime/.venv"
+    fi
+
+    if [[ -z "$SHARKTRACK_SOURCE" ]]; then
+        fail "Could not build SharkTrack runtime automatically. Set SHARKTRACK_SOURCE to a SharkTrack source checkout."
+    fi
+
+    if [[ ! -d "$SHARKTRACK_SOURCE" ]]; then
+        fail "SHARKTRACK_SOURCE does not exist: $SHARKTRACK_SOURCE"
+    fi
+
+    if [[ -z "$SHARKTRACK_VENV" ]]; then
+        SHARKTRACK_VENV="$SHARKTRACK_SOURCE/.venv"
+    fi
+
+    if [[ ! -x "$SHARKTRACK_VENV/bin/python" ]]; then
+        fail "Could not build SharkTrack runtime automatically. Expected Python executable at $SHARKTRACK_VENV/bin/python."
+    fi
+}
+
+ensure_pyinstaller_available() {
+    if "$SHARKTRACK_VENV/bin/python" -m PyInstaller --version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ "$INSTALL_PYINSTALLER_IF_MISSING" != "1" ]]; then
+        fail "PyInstaller is not installed in $SHARKTRACK_VENV. Install it or run with INSTALL_PYINSTALLER_IF_MISSING=1."
+    fi
+
+    log "Installing PyInstaller into SharkTrack build environment"
+    if command -v uv >/dev/null 2>&1; then
+        uv pip install --python "$SHARKTRACK_VENV/bin/python" "$PYINSTALLER_PACKAGE"
+        return 0
+    fi
+
+    "$SHARKTRACK_VENV/bin/python" -m pip install "$PYINSTALLER_PACKAGE"
+}
+
+build_sharktrack_runtime() {
+    local sharktrackkit_root
+    local runtime_destination="$SHARKTRACK_RUNTIME_BUILD_DIR"
+
+    if ! sharktrackkit_root="$(find_sharktrackkit_root)"; then
+        fail "Could not find SharkTrackKit BuildSupport/build_runner.sh. Set SHARKTRACKKIT_ROOT=/path/to/SharkTrackKit."
+    fi
+
+    resolve_sharktrack_build_inputs "$sharktrackkit_root"
+    ensure_pyinstaller_available
+    log "Building frozen SharkTrack runtime"
+    SHARKTRACK_SOURCE="$SHARKTRACK_SOURCE" \
+    SHARKTRACK_VENV="$SHARKTRACK_VENV" \
+    SHARKTRACK_RUNTIME_DEST="$runtime_destination" \
+        "$sharktrackkit_root/BuildSupport/build_runner.sh"
+
+    validate_sharktrack_runtime_source "$runtime_destination"
+    GENERATED_SHARKTRACK_RUNTIME_SOURCE="$runtime_destination"
+}
+
+is_valid_sharktrack_runtime_source() {
+    local runtime_source="$1"
+
+    [[ -f "$runtime_source/.runtime-version" && -x "$runtime_source/sharktrack-runner/sharktrack-runner" ]]
+}
+
+validate_sharktrack_runtime_source() {
+    local runtime_source="$1"
+
+    if [[ ! -f "$runtime_source/.runtime-version" ]]; then
+        fail "SharkTrack runtime at $runtime_source is missing .runtime-version."
+    fi
+
+    if [[ ! -x "$runtime_source/sharktrack-runner/sharktrack-runner" ]]; then
+        fail "SharkTrack runtime at $runtime_source is incomplete. Expected frozen executable at sharktrack-runner/sharktrack-runner."
+    fi
+
+    return 0
+}
+
+bundle_sharktrack_runtime() {
+    local app_bundle="$1"
+    local runtime_source
+    local runtime_destination="$app_bundle/Contents/Resources/$SHARKTRACK_RUNTIME_DESTINATION_NAME"
+
+    if ! runtime_source="$(find_sharktrack_runtime_source)"; then
+        build_sharktrack_runtime
+        runtime_source="$GENERATED_SHARKTRACK_RUNTIME_SOURCE"
+    fi
+
+    validate_sharktrack_runtime_source "$runtime_source"
+    log "Copying SharkTrack runtime into app bundle"
+    rm -rf "$runtime_destination"
+    ditto "$runtime_source" "$runtime_destination"
+}
+
+cleanup_generated_sharktrack_runtime_if_needed() {
+    if [[ "$REMOVE_SHARKTRACK_RUNTIME_AFTER_DMG" != "1" ]]; then
+        return 0
+    fi
+
+    if [[ -z "$GENERATED_SHARKTRACK_RUNTIME_SOURCE" ]]; then
+        return 0
+    fi
+
+    log "Removing generated SharkTrack runtime"
+    rm -rf "$GENERATED_SHARKTRACK_RUNTIME_SOURCE"
+}
+
+push_version_tag_if_needed() {
+    if [[ "$PUSH_VERSION_TAG" != "1" ]]; then
+        return 0
+    fi
+
+    "$ROOT_DIR/scripts/push_release_tag.sh"
+}
+
 resign_app_if_needed() {
     local app_bundle="$1"
     local identity
@@ -280,7 +499,8 @@ resign_app_if_needed() {
 
     if extract_entitlements "$app_bundle" "$entitlements_path"; then
         add_library_validation_entitlement "$entitlements_path"
-        log "Signing app bundle with preserved entitlements"
+        remove_app_sandbox_entitlement_if_needed "$entitlements_path"
+        log "Signing app bundle with packaged entitlements"
         /usr/bin/codesign \
             --force \
             --options runtime \
@@ -290,6 +510,7 @@ resign_app_if_needed() {
             "$app_bundle"
     else
         add_library_validation_entitlement "$entitlements_path"
+        remove_app_sandbox_entitlement_if_needed "$entitlements_path"
         log "Signing app bundle"
         /usr/bin/codesign \
             --force \
@@ -375,6 +596,9 @@ APPLESCRIPT
 
 require_space
 
+log "Packaging context: $PACKAGE_CONTEXT"
+log "Push version tag: $PUSH_VERSION_TAG"
+
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
     log "Building $APP_NAME ($CONFIGURATION)"
     xcodebuild \
@@ -398,8 +622,13 @@ log "Preparing staging folder"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR" "$ROOT_DIR/$OUTPUT_DIR"
 ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
+bundle_sharktrack_runtime "$STAGING_DIR/$APP_NAME.app"
 resign_app_if_needed "$STAGING_DIR/$APP_NAME.app"
-create_background
+if [[ "$SKIP_DMG_STYLING" == "1" ]]; then
+    log "Skipping DMG background for non-interactive packaging"
+else
+    create_background
+fi
 
 rm -f "$DMG_PATH" "$TEMP_DMG_PATH"
 
@@ -412,18 +641,24 @@ hdiutil create \
     -ov \
     "$TEMP_DMG_PATH"
 
-log "Mounting disk image for Finder layout"
-MOUNT_OUTPUT="$(hdiutil attach "$TEMP_DMG_PATH" -readwrite -noverify -noautoopen)"
-MOUNT_POINT="$(printf '%s\n' "$MOUNT_OUTPUT" | awk -F '\t' '/\/Volumes\// {print $NF; exit}')"
-if [[ -n "$MOUNT_POINT" && -d "$MOUNT_POINT" ]]; then
-    style_dmg "$MOUNT_POINT"
-    sync
-    hdiutil detach "$MOUNT_POINT" -quiet
+if [[ "$SKIP_DMG_STYLING" == "1" ]]; then
+    log "Skipping Finder DMG styling for non-interactive packaging"
+else
+    log "Mounting disk image for Finder layout"
+    MOUNT_OUTPUT="$(hdiutil attach "$TEMP_DMG_PATH" -readwrite -noverify -noautoopen)"
+    MOUNT_POINT="$(printf '%s\n' "$MOUNT_OUTPUT" | awk -F '\t' '/\/Volumes\// {print $NF; exit}')"
+    if [[ -n "$MOUNT_POINT" && -d "$MOUNT_POINT" ]]; then
+        style_dmg "$MOUNT_POINT"
+        sync
+        hdiutil detach "$MOUNT_POINT" -quiet
+    fi
 fi
 
 log "Compressing final DMG"
 hdiutil convert "$TEMP_DMG_PATH" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH" >/dev/null
 rm -f "$TEMP_DMG_PATH"
 sign_dmg_if_needed "$DMG_PATH"
+cleanup_generated_sharktrack_runtime_if_needed
+push_version_tag_if_needed
 
 log "Created $DMG_PATH"

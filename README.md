@@ -214,6 +214,28 @@ ALLOW_ADHOC_SIGNING=1 APP_PATH="/path/to/PAMFlow.app" SKIP_BUILD=1 scripts/creat
 
 Ad-hoc builds are for local testing only. Developers preparing their own builds should sign them with their own Apple Developer identity.
 
+To create and push the GitHub release tag for the current app version:
+
+```bash
+scripts/push_release_tag.sh
+```
+
+To create the DMG and push the current version tag after the DMG succeeds:
+
+```bash
+PUSH_VERSION_TAG=1 scripts/create_dmg.sh
+```
+
+Local packaging defaults to `PACKAGE_CONTEXT=local`, so it does not push tags unless `PUSH_VERSION_TAG=1` is set. GitHub Actions release packaging runs with `PACKAGE_CONTEXT=github`; manual release runs push the current version tag automatically, while tag-triggered release runs use the tag that started the workflow.
+
+## Installing GitHub Release Builds
+
+Initial GitHub release builds are distributed as unnotarized macOS DMGs. macOS may warn that it cannot verify the developer or check the app for malicious software.
+
+To open an unnotarized build, drag PAMFlow to Applications and try opening it once. If macOS blocks it, open System Settings, go to Privacy & Security, scroll to the Security section, and click Open Anyway for PAMFlow. Confirm Open in the macOS security prompt. Only install builds downloaded from the official GitHub Releases page.
+
+These builds bundle SharkTrack inside the app. They do not require a separate SharkTrackKit runtime install.
+
 ## Planned Features
 
 - Improved long-running processing resume support.

@@ -111,6 +111,25 @@ nonisolated struct SharkTrackProcessorFactory: Sendable {
     static let installedRuntime = SharkTrackProcessorFactory {
         SharkTrackProcessor()
     }
+
+    static let bundledRuntime = SharkTrackProcessorFactory {
+        if let resourceURL = Bundle.main.resourceURL {
+            let runtimeURL = resourceURL.appendingPathComponent("SharkTrackRuntime", isDirectory: true)
+            let frozenExecutableURL = runtimeURL
+                .appendingPathComponent("sharktrack-runner", isDirectory: true)
+                .appendingPathComponent("sharktrack-runner")
+
+            if FileManager.default.isExecutableFile(atPath: frozenExecutableURL.path) {
+                return SharkTrackProcessor(runtime: try SharkTrackRuntime.appBundleExecutable())
+            }
+
+            if FileManager.default.fileExists(atPath: runtimeURL.path) {
+                return SharkTrackProcessor(runtime: try SharkTrackRuntime.appBundleResource(named: "SharkTrackRuntime"))
+            }
+        }
+
+        return SharkTrackProcessor()
+    }
 }
 
 nonisolated struct SharkTrackMediaDiscovery: Sendable {

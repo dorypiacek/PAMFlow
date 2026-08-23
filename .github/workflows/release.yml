@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build DMG and Publish Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Read app version
+        id: version
+        run: |
+          version="$(
+            awk -F ' = ' '/MARKETING_VERSION = / {
+              gsub(/;$/, "", $2)
+              print $2
+              exit
+            }' PAMFlow.xcodeproj/project.pbxproj
+          )"
+
+          if [ -z "$version" ]; then
+            echo "Could not read MARKETING_VERSION from PAMFlow.xcodeproj/project.pbxproj" >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release tag
+        if: github.event_name == 'push'
+        run: |
+          expected="${{ steps.version.outputs.tag }}"
+          actual="${GITHUB_REF_NAME}"
+
+          if [ "$actual" != "$expected" ]; then
+            echo "Release tag $actual does not match app version ${{ steps.version.outputs.version }}. Expected $expected." >&2
+            exit 1
+          fi
+
+      - name: Fail if version already has a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists. Bump MARKETING_VERSION before publishing another release." >&2
+            exit 1
+          fi
+
+      - name: Fail manual release if version tag already exists
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists. Bump MARKETING_VERSION before publishing another release." >&2
+            exit 1
+          fi
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project PAMFlow.xcodeproj \
+            -scheme PAMFlow
+
+      - name: Build DMG
+        env:
+          ALLOW_ADHOC_SIGNING: '1'
+          REMOVE_SHARKTRACK_RUNTIME_AFTER_DMG: '1'
+          PACKAGE_CONTEXT: github
+          CI: '1'
+        run: scripts/create_dmg.sh
+
+      - name: Rename DMG
+        id: artifact
+        run: |
+          source="output/dmg/PAMFlow.dmg"
+          target="output/dmg/PAMFlow-${{ steps.version.outputs.tag }}-macOS-arm64-unnotarized.dmg"
+
+          if [ ! -f "$source" ]; then
+            echo "Expected DMG was not created at $source" >&2
+            exit 1
+          fi
+
+          mv "$source" "$target"
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes from changelog
+        id: notes
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          notes_file="$(mktemp)"
+          changelog_body="$(awk -v version="$version" '
+            $0 ~ "^##[[:space:]]+" version "([[:space:]]|$)" {
+              found = 1
+              next
+            }
+            found && /^##[[:space:]]+/ {
+              exit
+            }
+            found {
+              print
+            }
+          ' CHANGELOG.md)"
+
+          if [ -z "$changelog_body" ]; then
+            echo "CHANGELOG.md is missing a section for version $version." >&2
+            echo "Add a section headed exactly like: ## $version - YYYY-MM-DD" >&2
+            exit 1
+          fi
+
+          {
+            printf '## Installation note\n\n'
+            printf 'This PAMFlow macOS build is currently unnotarized. macOS may warn that it cannot verify the developer or check the app for malicious software. To open it, drag PAMFlow to Applications, try opening it once, then open System Settings > Privacy & Security, scroll to Security, and click Open Anyway for PAMFlow. Confirm Open in the macOS security prompt. Only install builds downloaded from this GitHub Releases page.\n\n'
+            printf '## Changes\n'
+            printf '%s\n' "$changelog_body"
+          } > "$notes_file"
+
+          echo "path=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PAMFlow-${{ steps.version.outputs.tag }}-macOS-arm64-unnotarized
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          dmg="${{ steps.artifact.outputs.path }}"
+          notes="${{ steps.notes.outputs.path }}"
+
+          gh release create "$tag" "$dmg" \
+            --target "$GITHUB_SHA" \
+            --title "PAMFlow $tag" \
+            --notes-file "$notes"

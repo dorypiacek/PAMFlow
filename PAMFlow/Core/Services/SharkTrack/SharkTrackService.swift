@@ -33,7 +33,7 @@ nonisolated final class SharkTrackService: SharkTrackServicing {
     init(
         configuration: SharkTrackPreparationConfiguration = .default,
         fileManager: FileManager = .default,
-        processorFactory: SharkTrackProcessorFactory = .installedRuntime,
+        processorFactory: SharkTrackProcessorFactory = .bundledRuntime,
         mediaDiscovery: SharkTrackMediaDiscovery = .default,
         outputWriter: SharkTrackOutputWriter = .default,
         summaryStore: SharkTrackSummaryStore = .default,
