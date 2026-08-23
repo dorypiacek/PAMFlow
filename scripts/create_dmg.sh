@@ -323,6 +323,24 @@ default_installed_sharktrack_runtime() {
     printf '%s\n' "$HOME/Library/Application Support/SharkTrackKit/runtimes/runtime-0.1.6"
 }
 
+find_uv_bin() {
+    local candidate
+    local candidates=(
+        "$(command -v uv 2>/dev/null || true)"
+        "$HOME/Library/Application Support/SharkTrackKit/tools/uv/uv"
+        "$HOME/.local/bin/uv"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if [[ -n "$candidate" && -x "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 resolve_sharktrack_build_inputs() {
     local sharktrackkit_root="$1"
     local installed_runtime
@@ -368,8 +386,9 @@ ensure_pyinstaller_available() {
     fi
 
     log "Installing PyInstaller into SharkTrack build environment"
-    if command -v uv >/dev/null 2>&1; then
-        uv pip install --python "$SHARKTRACK_VENV/bin/python" "$PYINSTALLER_PACKAGE"
+    local uv_bin
+    if uv_bin="$(find_uv_bin)"; then
+        "$uv_bin" pip install --python "$SHARKTRACK_VENV/bin/python" "$PYINSTALLER_PACKAGE"
         return 0
     fi
 
