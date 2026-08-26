@@ -13,6 +13,7 @@ import Foundation
 struct AudioPreview: Equatable, Sendable {
     var waveformPeaks: [WaveformPeak]
     var spectrogramBins: [[Float]]
+    var spectrogramMaxFrequencyHz: Double
     var durationSeconds: Double
     var sampleRateHz: Double
 }
@@ -37,6 +38,8 @@ protocol AudioPreviewServicing: Sendable {
 /// This type is nonisolated so CPU-heavy work can run off the main actor via
 /// `Task.detached` while the UI remains responsive.
 final class AudioPreviewService: AudioPreviewServicing {
+    private nonisolated static let spectrogramDisplayRangeDB: Float = 60
+
     enum AudioPreviewError: LocalizedError {
         case unreadableAudio
         case emptyAudio
@@ -70,9 +73,11 @@ final class AudioPreviewService: AudioPreviewServicing {
             )
         }
 
+        let spectrogram = try spectrogram(from: file, columns: 2_400, bins: 768)
         return AudioPreview(
             waveformPeaks: try waveformEnvelope(from: file, targetCount: 2_400),
-            spectrogramBins: try spectrogram(from: file, columns: 1_200, bins: 320),
+            spectrogramBins: spectrogram.bins,
+            spectrogramMaxFrequencyHz: spectrogram.maxFrequencyHz,
             durationSeconds: Double(frameCount) / file.processingFormat.sampleRate,
             sampleRateHz: file.processingFormat.sampleRate
         )
@@ -115,9 +120,11 @@ final class AudioPreviewService: AudioPreviewServicing {
             )
         }
 
+        let spectrogram = try spectrogram(from: samples, sampleRate: sampleRate, columns: 2_400, bins: 768)
         return AudioPreview(
             waveformPeaks: waveformEnvelope(from: samples, targetCount: 1_600),
-            spectrogramBins: try spectrogram(from: samples, sampleRate: sampleRate, columns: 1_200, bins: 320),
+            spectrogramBins: spectrogram.bins,
+            spectrogramMaxFrequencyHz: spectrogram.maxFrequencyHz,
             durationSeconds: Double(readFrames) / sampleRate,
             sampleRateHz: sampleRate
         )
@@ -183,19 +190,20 @@ final class AudioPreviewService: AudioPreviewServicing {
         }
     }
 
-    private nonisolated func spectrogram(from file: AVAudioFile, columns: Int, bins: Int) throws -> [[Float]] {
+    private nonisolated func spectrogram(from file: AVAudioFile, columns: Int, bins: Int) throws -> SpectrogramData {
         let windowSize = 4096
         let frameCount = Int(file.length)
         let sampleRate = file.processingFormat.sampleRate
-        guard frameCount >= windowSize else { return [] }
+        guard frameCount >= windowSize else {
+            return SpectrogramData(bins: [], maxFrequencyHz: max(sampleRate / 2, 1))
+        }
 
         guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(windowSize)) else {
             throw AudioPreviewError.unreadableAudio
         }
 
         let step = max(1, (frameCount - windowSize) / max(1, columns - 1))
-        var output: [[Float]] = []
-        var globalMaximum: Float = -.greatestFiniteMagnitude
+        var spectra: [[Float]] = []
         let window = hannWindow(size: windowSize)
         let log2WindowSize = vDSP_Length(log2(Float(windowSize)))
         guard let fftSetup = vDSP_create_fftsetup(log2WindowSize, FFTRadix(kFFTRadix2)) else {
@@ -224,22 +232,10 @@ final class AudioPreviewService: AudioPreviewServicing {
             }
 
             let spectrum = fftMagnitudes(samples: samples, setup: fftSetup, log2WindowSize: log2WindowSize)
-            let magnitudes = spectrogramMagnitudes(
-                spectrum: spectrum,
-                bins: bins,
-                sampleRate: sampleRate,
-                globalMaximum: &globalMaximum
-            )
-
-            output.append(magnitudes)
+            spectra.append(decibelSpectrum(spectrum))
         }
 
-        let displayRange: Float = 50
-        return output.map { column in
-            column.map { value in
-                min(1, max(0, (value - (globalMaximum - displayRange)) / displayRange))
-            }
-        }
+        return normalizedSpectrogram(from: spectra, bins: bins, sampleRate: sampleRate)
     }
 
     private nonisolated func spectrogram(
@@ -247,13 +243,14 @@ final class AudioPreviewService: AudioPreviewServicing {
         sampleRate: Double,
         columns: Int,
         bins: Int
-    ) throws -> [[Float]] {
+    ) throws -> SpectrogramData {
         let windowSize = min(4096, max(128, previousPowerOfTwo(samples.count)))
-        guard samples.count >= windowSize else { return [] }
+        guard samples.count >= windowSize else {
+            return SpectrogramData(bins: [], maxFrequencyHz: max(sampleRate / 2, 1))
+        }
 
         let step = max(1, (samples.count - windowSize) / max(1, columns - 1))
-        var output: [[Float]] = []
-        var globalMaximum: Float = -.greatestFiniteMagnitude
+        var spectra: [[Float]] = []
         let window = hannWindow(size: windowSize)
         let log2WindowSize = vDSP_Length(log2(Float(windowSize)))
         guard let fftSetup = vDSP_create_fftsetup(log2WindowSize, FFTRadix(kFFTRadix2)) else {
@@ -267,45 +264,52 @@ final class AudioPreviewService: AudioPreviewServicing {
             let start = min(column * step, samples.count - windowSize)
             let windowedSamples = (0..<windowSize).map { samples[start + $0] * window[$0] }
             let spectrum = fftMagnitudes(samples: windowedSamples, setup: fftSetup, log2WindowSize: log2WindowSize)
-            let magnitudes = spectrogramMagnitudes(
-                spectrum: spectrum,
-                bins: bins,
-                sampleRate: sampleRate,
-                globalMaximum: &globalMaximum
-            )
-
-            output.append(magnitudes)
+            spectra.append(decibelSpectrum(spectrum))
         }
 
-        let displayRange: Float = 50
-        return output.map { column in
-            column.map { value in
-                min(1, max(0, (value - (globalMaximum - displayRange)) / displayRange))
-            }
+        return normalizedSpectrogram(from: spectra, bins: bins, sampleRate: sampleRate)
+    }
+
+    private nonisolated func decibelSpectrum(_ spectrum: [Float]) -> [Float] {
+        spectrum.map { value in
+            20 * log10(max(sqrt(value), 0.000_000_1))
         }
     }
 
-    private nonisolated func spectrogramMagnitudes(
-        spectrum: [Float],
+    private nonisolated func normalizedSpectrogram(
+        from spectra: [[Float]],
         bins: Int,
-        sampleRate: Double,
-        globalMaximum: inout Float
-    ) -> [Float] {
-        let displayedMaximumFrequency = min(max(sampleRate / 2, 1), 50_000)
-        let maxSpectrumIndex = max(1, Int((displayedMaximumFrequency / max(sampleRate / 2, 1)) * Double(spectrum.count - 1)))
-        var magnitudes = Array(repeating: Float(0), count: bins)
-
-        for bin in 0..<bins {
-            let lower = max(1, (bin * maxSpectrumIndex) / bins)
-            let upper = max(lower + 1, ((bin + 1) * maxSpectrumIndex) / bins)
-            let range = lower..<min(upper, spectrum.count)
-            let average = range.reduce(Float(0)) { $0 + spectrum[$1] } / Float(max(1, range.count))
-            let decibels = 20 * log10(max(sqrt(average), 0.000_000_1))
-            globalMaximum = max(globalMaximum, decibels)
-            magnitudes[bin] = decibels
+        sampleRate: Double
+    ) -> SpectrogramData {
+        guard let firstSpectrum = spectra.first, !firstSpectrum.isEmpty else {
+            return SpectrogramData(bins: [], maxFrequencyHz: max(sampleRate / 2, 1))
         }
 
-        return magnitudes
+        let nyquist = max(sampleRate / 2, 1)
+        let maxSpectrumIndex = firstSpectrum.count - 1
+        var output: [[Float]] = []
+        var globalMaximum: Float = -.greatestFiniteMagnitude
+
+        for spectrum in spectra {
+            var magnitudes = Array(repeating: Float(0), count: bins)
+            for bin in 0..<bins {
+                let lower = (bin * maxSpectrumIndex) / bins
+                let upper = max(lower + 1, ((bin + 1) * maxSpectrumIndex) / bins)
+                let range = lower..<min(upper, spectrum.count)
+                let average = range.reduce(Float(0)) { $0 + spectrum[$1] } / Float(max(1, range.count))
+                globalMaximum = max(globalMaximum, average)
+                magnitudes[bin] = average
+            }
+            output.append(magnitudes)
+        }
+
+        let normalized = output.map { column in
+            column.map { value in
+                min(1, max(0, (value - (globalMaximum - Self.spectrogramDisplayRangeDB)) / Self.spectrogramDisplayRangeDB))
+            }
+        }
+
+        return SpectrogramData(bins: normalized, maxFrequencyHz: nyquist)
     }
 
     private nonisolated func fftMagnitudes(
@@ -368,4 +372,9 @@ final class AudioPreviewService: AudioPreviewServicing {
         }
         return result
     }
+}
+
+private struct SpectrogramData {
+    var bins: [[Float]]
+    var maxFrequencyHz: Double
 }

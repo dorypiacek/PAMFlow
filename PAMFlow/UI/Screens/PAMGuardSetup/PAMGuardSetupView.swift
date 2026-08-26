@@ -61,6 +61,9 @@ struct PAMGuardSetupView: View {
                 showsPAMGuardHelp = false
             }
         }
+        .task {
+            restorePreparedResultIfNeeded()
+        }
     }
 
     private func setupContent(project: Project) -> some View {
@@ -125,6 +128,9 @@ struct PAMGuardSetupView: View {
                 .buttonStyle(.secondaryAction)
 
                 Button(Strings.PAMGuardSetup.continueButton) {
+                    project.workflowStatus = .processingProjectCreated
+                    project.lastOpenedAt = .now
+                    try? modelContext.save()
                     appCoordinator.openPAMGuardWaiting(project)
                 }
                 .buttonStyle(.primaryAction)
@@ -147,7 +153,7 @@ struct PAMGuardSetupView: View {
                 decisions: auditDecisions(for: project),
                 target: target
             )
-            project.workflowStatus = .processingProjectCreated
+            project.workflowStatus = .pamguardSetupReady
             project.lastOpenedAt = .now
             try modelContext.save()
             result = preparedResult
@@ -172,7 +178,7 @@ struct PAMGuardSetupView: View {
 
     private func pamguardFolderRevealAction() -> (() -> Void)? {
         guard let project = fetchProject(),
-              let result else {
+              let preparedResult = result ?? restoredPreparedResult(for: project) else {
             return nil
         }
 
@@ -185,8 +191,61 @@ struct PAMGuardSetupView: View {
                 }
             }
 
-            FileSelectionService.revealInFinder(result.templateURL)
+            FileSelectionService.revealInFinder(preparedResult.templateURL)
         }
+    }
+
+    private func restorePreparedResultIfNeeded() {
+        guard result == nil,
+              let project = fetchProject(),
+              let restoredResult = restoredPreparedResult(for: project) else {
+            return
+        }
+
+        result = restoredResult
+    }
+
+    private func restoredPreparedResult(for project: Project) -> PAMGuardPreparationService.Result? {
+        guard let projectRootURL = project.rootFolderURL else {
+            return nil
+        }
+
+        let accessed = projectRootURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                projectRootURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let pamguardURL = projectRootURL.appendingPathComponent(ProjectFileNames.pamguardDirectory, isDirectory: true)
+        let inputURL = pamguardURL.appendingPathComponent("input", isDirectory: true)
+        guard let templateURL = firstTemplateURL(in: pamguardURL) else {
+            return nil
+        }
+
+        let linkedInputCount = (try? FileManager.default.contentsOfDirectory(
+            at: inputURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ).count) ?? 0
+
+        return PAMGuardPreparationService.Result(
+            templateURL: templateURL,
+            linkedInputCount: linkedInputCount
+        )
+    }
+
+    private func firstTemplateURL(in pamguardURL: URL) -> URL? {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: pamguardURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        return files
+            .filter { $0.pathExtension.localizedCaseInsensitiveCompare("psfx") == .orderedSame }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .first
     }
 
     private func auditDecisions(for project: Project) -> [ManualAuditDecision] {

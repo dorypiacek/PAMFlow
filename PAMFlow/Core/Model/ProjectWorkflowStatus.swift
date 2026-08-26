@@ -14,6 +14,7 @@ enum ProjectWorkflowStatus: String, CaseIterable, Codable, Hashable {
     case scanCompleted
     case manualAuditInProgress
     case manualAuditCompleted
+    case pamguardSetupReady
     case processingProjectCreated
     case processingRunImported
     case runOverviewCompleted
@@ -32,6 +33,8 @@ enum ProjectWorkflowStatus: String, CaseIterable, Codable, Hashable {
             Strings.WorkflowStatus.manualAuditInProgress
         case .manualAuditCompleted:
             Strings.WorkflowStatus.manualAuditCompleted
+        case .pamguardSetupReady:
+            Strings.WorkflowStatus.pamguardSetupReady
         case .processingProjectCreated:
             Strings.WorkflowStatus.processingProjectCreated
         case .processingRunImported:
@@ -51,8 +54,10 @@ enum ProjectWorkflowStatus: String, CaseIterable, Codable, Hashable {
             Strings.WorkflowStatus.projectCreated
         case .scanCompleted, .manualAuditInProgress:
             Strings.WorkflowStatus.scanCompleted
-        case .manualAuditCompleted, .processingProjectCreated:
+        case .manualAuditCompleted:
             Strings.WorkflowStatus.manualAuditCompleted
+        case .pamguardSetupReady, .processingProjectCreated:
+            Strings.WorkflowStatus.pamguardSetupReady
         case .processingRunImported, .runOverviewCompleted:
             Strings.WorkflowStatus.processingRunImported
         case .detectionReviewInProgress:
@@ -72,6 +77,8 @@ enum ProjectWorkflowStatus: String, CaseIterable, Codable, Hashable {
             Strings.WorkflowStatus.continueManualAudit
         case .manualAuditCompleted:
             Strings.WorkflowStatus.openAuditOverview
+        case .pamguardSetupReady:
+            Strings.WorkflowStatus.openPamguardSetup
         case .processingProjectCreated:
             Strings.WorkflowStatus.importProcessingRun
         case .processingRunImported:

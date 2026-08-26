@@ -216,7 +216,7 @@ struct ManualAuditView: View {
     private func previewImages(_ preview: AudioPreview) -> some View {
         GeometryReader { proxy in
             let availableHeight = max(1, proxy.size.height - Spacing.small)
-            let imageHeight = max(1, availableHeight / 2)
+            let plotContainerHeight = max(1, availableHeight / 2)
             
             VStack(spacing: Spacing.small) {
                 ChartWithPlayhead(
@@ -228,7 +228,7 @@ struct ManualAuditView: View {
                         durationSeconds: preview.durationSeconds
                     )
                 }
-                .frame(height: imageHeight)
+                .frame(height: plotContainerHeight)
                 
                 ChartWithPlayhead(
                     durationSeconds: preview.durationSeconds,
@@ -237,10 +237,10 @@ struct ManualAuditView: View {
                     SpectrogramView(
                         bins: preview.spectrogramBins,
                         durationSeconds: preview.durationSeconds,
-                        sampleRateHz: preview.sampleRateHz
+                        maxFrequencyHz: preview.spectrogramMaxFrequencyHz
                     )
                 }
-                .frame(height: imageHeight)
+                .frame(height: plotContainerHeight)
             }
         }
         .frame(maxHeight: .infinity)
@@ -1044,35 +1044,38 @@ private struct WaveformView: View {
 private struct SpectrogramView: View {
     let bins: [[Float]]
     let durationSeconds: Double
-    let sampleRateHz: Double
+    let maxFrequencyHz: Double
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
     
     var body: some View {
         Canvas { context, size in
             guard let firstColumn = bins.first, !firstColumn.isEmpty else { return }
 
             let plot = chartPlotRect(size)
-            let maxFrequency = staticSpectrogramMaxFrequency()
+            let maxFrequency = max(maxFrequencyHz, 1)
             var background = Path()
             background.addRect(plot)
             context.fill(background, with: .color(spectrogramPlotBackground))
 
             var plotContext = context
             plotContext.clip(to: Path(plot))
-            let sampleColumns = max(1, min(Int(plot.width), 1_400))
-            let sampleRows = max(1, min(Int(plot.height), 420))
+            let rasterScale = max(displayScale, 1)
+            let sampleColumns = max(1, min(Int((plot.width * rasterScale).rounded(.up)), bins.count))
+            let sampleRows = max(1, min(Int((plot.height * rasterScale).rounded(.up)), firstColumn.count))
             let cellWidth = plot.width / CGFloat(sampleColumns)
             let cellHeight = plot.height / CGFloat(sampleRows)
 
             for xIndex in 0..<sampleColumns {
-                let timeFraction = (Double(xIndex) + 0.5) / Double(sampleColumns)
-                let time = durationSeconds * timeFraction
                 let x = plot.minX + CGFloat(xIndex) * cellWidth
 
                 for yIndex in 0..<sampleRows {
-                    let frequencyFraction = (Double(yIndex) + 0.5) / Double(sampleRows)
-                    let frequency = maxFrequency * frequencyFraction
-                    let value = interpolatedValue(time: time, frequency: frequency)
+                    let value = rasterValue(
+                        xIndex: xIndex,
+                        yIndex: yIndex,
+                        rasterColumns: sampleColumns,
+                        rasterRows: sampleRows
+                    )
                     let y = plot.maxY - CGFloat(yIndex + 1) * cellHeight
                     let rect = CGRect(
                         x: x,
@@ -1089,6 +1092,48 @@ private struct SpectrogramView: View {
         }
     }
 
+    private func rasterValue(
+        xIndex: Int,
+        yIndex: Int,
+        rasterColumns: Int,
+        rasterRows: Int
+    ) -> Double {
+        guard let firstColumn = bins.first, !bins.isEmpty, !firstColumn.isEmpty else {
+            return 0
+        }
+
+        let columnStart = Double(xIndex) / Double(max(rasterColumns, 1)) * Double(bins.count)
+        let columnEnd = Double(xIndex + 1) / Double(max(rasterColumns, 1)) * Double(bins.count)
+        let rowStart = Double(yIndex) / Double(max(rasterRows, 1)) * Double(firstColumn.count)
+        let rowEnd = Double(yIndex + 1) / Double(max(rasterRows, 1)) * Double(firstColumn.count)
+
+        if columnEnd - columnStart <= 1, rowEnd - rowStart <= 1 {
+            let time = durationSeconds * (Double(xIndex) + 0.5) / Double(max(rasterColumns, 1))
+            let frequency = maxFrequencyHz * (Double(yIndex) + 0.5) / Double(max(rasterRows, 1))
+            return interpolatedValue(time: time, frequency: frequency)
+        }
+
+        let columnLower = min(bins.count - 1, max(0, Int(floor(columnStart))))
+        let columnUpper = min(bins.count - 1, max(columnLower, Int(ceil(columnEnd)) - 1))
+        let rowLower = min(firstColumn.count - 1, max(0, Int(floor(rowStart))))
+        let rowUpper = min(firstColumn.count - 1, max(rowLower, Int(ceil(rowEnd)) - 1))
+        var peak = 0.0
+
+        for column in columnLower...columnUpper {
+            var sum = 0.0
+            var count = 0
+            for row in rowLower...rowUpper {
+                sum += valueAt(column: column, row: row)
+                count += 1
+            }
+            if count > 0 {
+                peak = max(peak, sum / Double(count))
+            }
+        }
+
+        return peak
+    }
+
     private func interpolatedValue(time: Double, frequency: Double) -> Double {
         guard let firstColumn = bins.first, !bins.isEmpty, !firstColumn.isEmpty else {
             return 0
@@ -1096,7 +1141,7 @@ private struct SpectrogramView: View {
 
         let maxColumn = Double(bins.count - 1)
         let maxRow = Double(firstColumn.count - 1)
-        let displayedMaxFrequency = staticSpectrogramMaxFrequency()
+        let displayedMaxFrequency = max(maxFrequencyHz, 1)
         let columnPosition = min(max(time / max(durationSeconds, 0.01) * maxColumn, 0), maxColumn)
         let rowPosition = min(max(frequency / displayedMaxFrequency * maxRow, 0), maxRow)
         let column0 = Int(floor(columnPosition))
@@ -1123,9 +1168,9 @@ private struct SpectrogramView: View {
     
     private func color(for value: Double) -> Color {
         let stops: [(Double, Double, Double, Double)] = [
-            (0.02, 0.01, 0.08, 1.00),
-            (0.11, 0.04, 0.28, 1.00),
-            (0.39, 0.08, 0.51, 1.00),
+            (0.04, 0.02, 0.12, 1.00),
+            (0.16, 0.05, 0.34, 1.00),
+            (0.46, 0.08, 0.55, 1.00),
             (0.86, 0.24, 0.45, 1.00),
             (1.00, 0.55, 0.22, 1.00),
             (1.00, 0.92, 0.60, 1.00)
@@ -1145,10 +1190,6 @@ private struct SpectrogramView: View {
         )
     }
 
-    private func staticSpectrogramMaxFrequency() -> Double {
-        min(max(sampleRateHz / 2, 1), 50_000)
-    }
-    
     private func drawAxes(
         context: GraphicsContext,
         plot: CGRect,
@@ -1347,8 +1388,12 @@ private func timeTicks(duration: Double) -> [Double] {
 
 private func frequencyTicks(maxFrequency: Double) -> [Double] {
     guard maxFrequency > 0 else { return [] }
-    let step = maxFrequency >= 150_000 ? 25_000.0 : maxFrequency >= 40_000 ? 10_000.0 : 5_000.0
-    return stride(from: 0.0, through: maxFrequency, by: step).map { $0 }
+    let step = maxFrequency >= 100_000 ? 50_000.0 : maxFrequency >= 40_000 ? 10_000.0 : 5_000.0
+    var ticks = stride(from: 0.0, through: maxFrequency, by: step).map { $0 }
+    if ticks.last.map({ abs($0 - maxFrequency) > step * 0.2 }) ?? true {
+        ticks.append(maxFrequency)
+    }
+    return ticks
 }
 
 private func clampedFrequencyZoom(_ zoom: Double) -> Double {

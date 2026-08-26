@@ -87,6 +87,10 @@ struct ManualAuditOverviewModel {
             : Strings.ManualAuditOverview.subtitle
     }
     var primaryActionTitle: String {
+        if !isComplete {
+            return Strings.ManualAuditOverview.reviewDetections
+        }
+
         if isPAMGuardDetectionReview {
             return Strings.ManualAuditOverview.continueToReport
         }
@@ -94,8 +98,8 @@ struct ManualAuditOverviewModel {
         return module.usesPAMGuard ? Strings.ManualAuditOverview.goToPamguardSetup : Strings.ManualAuditOverview.continueToReport
     }
     var primaryActionHelp: String {
-        guard isComplete else {
-            return Strings.ManualAuditOverview.finishAuditHelp
+        if !isComplete {
+            return Strings.ManualAuditOverview.reviewDetectionsHelp
         }
 
         if isPAMGuardDetectionReview {
@@ -105,7 +109,7 @@ struct ManualAuditOverviewModel {
         return module.usesPAMGuard ? Strings.ManualAuditOverview.preparePamguardHelp : Strings.ManualAuditOverview.reportHelp
     }
     var opensCompletionFromPrimaryAction: Bool {
-        isPAMGuardDetectionReview || !module.usesPAMGuard
+        isComplete && (isPAMGuardDetectionReview || !module.usesPAMGuard)
     }
 
     /// Metrics shown in the details card for the current workflow stage.

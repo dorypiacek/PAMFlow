@@ -235,6 +235,12 @@ final class AppCoordinator: AppCoordinating {
             openManualAudit(project)
         case .manualAuditCompleted:
             openManualAuditOverview(project)
+        case .pamguardSetupReady:
+            if module.usesPAMGuard {
+                openPAMGuardSetup(project)
+            } else {
+                openManualAuditOverview(project)
+            }
         case .processingProjectCreated:
             if module.requiresSharkTrack {
                 if hasReviewFrames(project) {

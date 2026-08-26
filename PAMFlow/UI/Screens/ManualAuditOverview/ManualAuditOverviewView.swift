@@ -18,7 +18,7 @@ struct ManualAuditOverviewView: View {
 
     @State private var screenModel: ManualAuditOverviewScreenModel
     @State private var isSpeciesExpanded = true
-    @State private var isMediaBreakdownExpanded = true
+    @State private var isMediaBreakdownExpanded = false
 
     init(projectID: UUID, projectScanService: ProjectScanServicing) {
         self.projectID = projectID
@@ -133,7 +133,6 @@ struct ManualAuditOverviewView: View {
                     completePrimaryAction(model)
                 }
                 .buttonStyle(.primaryAction)
-                .disabled(!model.isComplete)
                 .help(model.primaryActionHelp)
             }
         }

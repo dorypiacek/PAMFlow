@@ -302,7 +302,7 @@ struct PAMDetectionPackageExporter {
             clipStartSeconds: event.startOffsetSeconds,
             clipDurationSeconds: max(1, event.durationSeconds)
         )
-        let size = CGSize(width: 1800, height: 1100)
+        let size = CGSize(width: 3600, height: 2200)
         let image = NSImage(size: size)
         image.lockFocus()
         NSColor.white.setFill()
@@ -310,16 +310,20 @@ struct PAMDetectionPackageExporter {
 
         let title = "\(event.eventID) | \(event.detectorType)"
         let subtitle = "\(decimal(event.startOffsetSeconds))-\(decimal(event.endOffsetSeconds)) s | \(frequencyLabel(low: event.minFrequencyHz, high: event.maxFrequencyHz))"
-        title.draw(at: CGPoint(x: 72, y: 1028), withAttributes: [
-            .font: NSFont.boldSystemFont(ofSize: 30),
+        title.draw(at: CGPoint(x: 144, y: 2056), withAttributes: [
+            .font: NSFont.boldSystemFont(ofSize: 60),
             .foregroundColor: NSColor.labelColor
         ])
-        subtitle.draw(at: CGPoint(x: 72, y: 984), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 22),
+        subtitle.draw(at: CGPoint(x: 144, y: 1968), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 44),
             .foregroundColor: NSColor.secondaryLabelColor
         ])
 
-        drawSpectrogram(preview.spectrogramBins, sampleRateHz: preview.sampleRateHz, rect: CGRect(x: 72, y: 92, width: 1656, height: 840))
+        drawSpectrogram(
+            preview.spectrogramBins,
+            maxFrequencyHz: preview.spectrogramMaxFrequencyHz,
+            rect: CGRect(x: 144, y: 184, width: 3312, height: 1680)
+        )
         image.unlockFocus()
 
         guard let data = image.tiffRepresentation,
@@ -330,12 +334,12 @@ struct PAMDetectionPackageExporter {
         try png.write(to: url, options: .atomic)
     }
 
-    private func drawSpectrogram(_ bins: [[Float]], sampleRateHz: Double, rect: CGRect) {
+    private func drawSpectrogram(_ bins: [[Float]], maxFrequencyHz: Double, rect: CGRect) {
         NSColor(calibratedRed: 0.02, green: 0.01, blue: 0.06, alpha: 1).setFill()
         NSBezierPath(rect: rect).fill()
         guard let firstColumn = bins.first, !firstColumn.isEmpty else { return }
 
-        let maxFrequency = min(max(sampleRateHz / 2, 1), 50_000)
+        let maxFrequency = max(maxFrequencyHz, 1)
         let columns = min(bins.count, Int(rect.width))
         let rows = min(firstColumn.count, Int(rect.height))
         let cellWidth = rect.width / CGFloat(columns)
@@ -358,22 +362,22 @@ struct PAMDetectionPackageExporter {
         NSColor.black.setStroke()
         NSBezierPath(rect: rect).stroke()
         let axisAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 18, weight: .semibold),
+            .font: NSFont.systemFont(ofSize: 36, weight: .semibold),
             .foregroundColor: NSColor.labelColor
         ]
-        Strings.PAMDetectionPackage.timeAxis.draw(at: CGPoint(x: rect.midX - 34, y: 42), withAttributes: axisAttributes)
-        Strings.PAMDetectionPackage.frequencyAxis.draw(at: CGPoint(x: rect.minX, y: rect.maxY + 18), withAttributes: axisAttributes)
-        for tick in stride(from: 0.0, through: maxFrequency, by: maxFrequency <= 50_000 ? 10_000 : 25_000) {
+        Strings.PAMDetectionPackage.timeAxis.draw(at: CGPoint(x: rect.midX - 68, y: 84), withAttributes: axisAttributes)
+        Strings.PAMDetectionPackage.frequencyAxis.draw(at: CGPoint(x: rect.minX, y: rect.maxY + 36), withAttributes: axisAttributes)
+        for tick in spectrogramFrequencyTicks(maxFrequency: maxFrequency) {
             let y = rect.minY + rect.height * CGFloat(tick / maxFrequency)
-            "\(Int(tick))".draw(at: CGPoint(x: 12, y: y - 9), withAttributes: axisAttributes)
+            spectrogramFrequencyLabel(tick).draw(at: CGPoint(x: 24, y: y - 18), withAttributes: axisAttributes)
         }
     }
 
     private func spectrogramColor(_ value: Double) -> NSColor {
         let stops: [(Double, Double, Double)] = [
-            (0.02, 0.01, 0.08),
-            (0.11, 0.04, 0.28),
-            (0.39, 0.08, 0.51),
+            (0.04, 0.02, 0.12),
+            (0.16, 0.05, 0.34),
+            (0.46, 0.08, 0.55),
             (0.86, 0.24, 0.45),
             (1.00, 0.55, 0.22),
             (1.00, 0.92, 0.60)
@@ -390,6 +394,24 @@ struct PAMDetectionPackageExporter {
             blue: a.2 + (b.2 - a.2) * fraction,
             alpha: 1
         )
+    }
+
+    private func spectrogramFrequencyTicks(maxFrequency: Double) -> [Double] {
+        guard maxFrequency > 0 else { return [] }
+        let step = maxFrequency >= 100_000 ? 50_000.0 : maxFrequency >= 40_000 ? 10_000.0 : 5_000.0
+        var ticks = stride(from: 0.0, through: maxFrequency, by: step).map { $0 }
+        if ticks.last.map({ abs($0 - maxFrequency) > step * 0.2 }) ?? true {
+            ticks.append(maxFrequency)
+        }
+        return ticks
+    }
+
+    private func spectrogramFrequencyLabel(_ frequency: Double) -> String {
+        if frequency >= 1_000 {
+            "\(Int(frequency / 1_000))k"
+        } else {
+            "\(Int(frequency))"
+        }
     }
 
     private func ravenSelectionTable(events: [PAMEventRow], sample: PAMSampleRow) -> String {

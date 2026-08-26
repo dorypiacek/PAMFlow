@@ -63,6 +63,15 @@ final class ManualAuditOverviewScreenModel {
     ) throws {
         let project = overview.project
         let opensCompletion = overview.opensCompletionFromPrimaryAction
+
+        if !overview.isComplete {
+            project.workflowStatus = overview.isPAMGuardDetectionReview ? .detectionReviewInProgress : .manualAuditInProgress
+            project.lastOpenedAt = .now
+            try modelContext.save()
+            coordinator.openManualAudit(project, startAtLastReviewed: true)
+            return
+        }
+
         project.workflowStatus = opensCompletion
             ? .completed
             : .processingProjectCreated

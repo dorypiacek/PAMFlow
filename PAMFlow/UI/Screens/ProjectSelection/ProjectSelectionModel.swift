@@ -142,6 +142,10 @@ struct ProjectSelectionModel {
             return Strings.ProjectSelection.processingCompleted
         }
 
+        if module.usesPAMGuard, project.workflowStatus == .pamguardSetupReady {
+            return Strings.ProjectSelection.pamguardSetupReady
+        }
+
         if module.usesPAMGuard, project.workflowStatus == .processingProjectCreated {
             return Strings.ProjectSelection.waitingForPamguard
         }
@@ -174,6 +178,10 @@ struct ProjectSelectionModel {
             }
         }
 
+        if module.usesPAMGuard, project.workflowStatus == .pamguardSetupReady {
+            return Strings.ProjectSelection.openPamguardSetupButton
+        }
+
         if module.usesPAMGuard, project.workflowStatus == .processingProjectCreated {
             return Strings.ProjectSelection.openPamguardWaitingButton
         }
@@ -185,6 +193,10 @@ struct ProjectSelectionModel {
         let status = project.workflowStatus
         if module.requiresSharkTrack, status == .processingProjectCreated {
             return "\(Strings.ProjectSelection.lastCompletedPrefix) \(Strings.ProjectSelection.processingCompleted)"
+        }
+
+        if module.usesPAMGuard, status == .pamguardSetupReady {
+            return "\(Strings.ProjectSelection.lastCompletedPrefix) \(Strings.ProjectSelection.pamguardSetupCompleted)"
         }
 
         if module.usesPAMGuard, status == .processingProjectCreated {

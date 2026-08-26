@@ -67,11 +67,9 @@ struct AppButtonStyle: ButtonStyle {
     private var border: some View {
         switch role {
         case .primary:
-            Capsule().stroke(AppColors.accent.opacity(0.4), lineWidth: Metrics.Layout.hairline)
-        case .secondary:
-            Capsule().stroke(Color.white.opacity(0.4), lineWidth: Metrics.Layout.hairline)
-        case .prominentSecondary:
-            Capsule().stroke(AppColors.accent.opacity(0.4), lineWidth: Metrics.Layout.hairline)
+            Capsule().stroke(AppColors.accent.opacity(0.55), lineWidth: Metrics.Layout.hairline)
+        case .secondary, .prominentSecondary:
+            Capsule().stroke(AppColors.accent.opacity(0.48), lineWidth: Metrics.Layout.hairline)
         }
     }
 }

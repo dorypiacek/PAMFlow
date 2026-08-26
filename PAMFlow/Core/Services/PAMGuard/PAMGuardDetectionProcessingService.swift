@@ -22,6 +22,9 @@ protocol PAMGuardDetectionProcessingServicing {
 
 /// Imports PAMGuard run outputs into the native detection-review workflow.
 final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServicing {
+    private nonisolated static let eventMergeGapSeconds = 2.0
+    private nonisolated static let eventReviewPaddingSeconds = 2.0
+
     struct Progress: Sendable {
         let message: String
         let current: Int?
@@ -493,14 +496,13 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
         return Dictionary(grouping: merged, by: \.fileID)
             .values
             .flatMap { events in
-                nonOverlappingReviewEvents(events)
-                    .sorted {
-                        if $0.score == $1.score {
-                            return $0.startTime < $1.startTime
-                        }
-                        return $0.score > $1.score
+                events.sorted {
+                    if $0.score == $1.score {
+                        return $0.startTime < $1.startTime
                     }
-                    .prefix(20)
+                    return $0.score > $1.score
+                }
+                .prefix(20)
             }
             .sorted {
                 if $0.fileID == $1.fileID {
@@ -508,28 +510,6 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
                 }
                 return $0.fileID.localizedStandardCompare($1.fileID) == .orderedAscending
             }
-    }
-
-    nonisolated private func nonOverlappingReviewEvents(_ events: [PAMGuardEvent]) -> [PAMGuardEvent] {
-        let ranked = events.sorted {
-            if $0.score == $1.score {
-                return $0.reviewStartTime < $1.reviewStartTime
-            }
-            return $0.score > $1.score
-        }
-        var kept: [PAMGuardEvent] = []
-        for event in ranked {
-            let overlapsExisting = kept.contains { existing in
-                event.fileID == existing.fileID &&
-                    event.reviewStartTime < existing.reviewEndTime &&
-                    existing.reviewStartTime < event.reviewEndTime
-            }
-            guard !overlapsExisting else {
-                continue
-            }
-            kept.append(event)
-        }
-        return kept
     }
 
     nonisolated private func normalizedTimeRange(
@@ -655,7 +635,7 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
         for candidate in sorted {
             guard var last = merged.last,
                   last.fileID == candidate.fileID,
-                  candidate.startTime - last.endTime <= 5.0 else {
+                  candidate.startTime - last.endTime <= Self.eventMergeGapSeconds else {
                 merged.append(candidate)
                 continue
             }
@@ -666,33 +646,12 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
     }
 
     nonisolated private func splitLongEvent(_ candidate: EventCandidate) -> [EventCandidate] {
-        let sourceDuration = candidate.source.durationSeconds ?? max(candidate.endTime + 5.0, candidate.startTime + 1.0)
-        let reviewStart = max(0, candidate.startTime - 5.0)
-        let reviewEnd = min(sourceDuration, candidate.endTime + 5.0)
-        guard reviewEnd - reviewStart > 60.0 else {
-            var output = candidate
-            output.reviewStartTime = reviewStart
-            output.reviewEndTime = reviewEnd
-            output.expandEventDuration(toAtLeast: 1.0, sourceDuration: sourceDuration)
-            return [output]
-        }
-
-        var chunks: [EventCandidate] = []
-        var start = reviewStart
-        var index = 1
-        while start < reviewEnd {
-            var chunk = candidate
-            chunk.idSuffix = "part-\(index)"
-            chunk.reviewStartTime = start
-            chunk.reviewEndTime = min(start + 60.0, reviewEnd)
-            chunk.startTime = max(candidate.startTime, chunk.reviewStartTime)
-            chunk.endTime = min(candidate.endTime, chunk.reviewEndTime)
-            chunk.expandEventDuration(toAtLeast: 1.0, sourceDuration: sourceDuration)
-            chunks.append(chunk)
-            start += 60.0
-            index += 1
-        }
-        return chunks
+        let sourceDuration = candidate.source.durationSeconds ?? max(candidate.endTime + Self.eventReviewPaddingSeconds, candidate.startTime + 1.0)
+        var output = candidate
+        output.reviewStartTime = max(0, candidate.startTime - Self.eventReviewPaddingSeconds)
+        output.reviewEndTime = min(sourceDuration, candidate.endTime + Self.eventReviewPaddingSeconds)
+        output.expandEventDuration(toAtLeast: 1.0, sourceDuration: sourceDuration)
+        return [output]
     }
 
     nonisolated private func scoredEvent(_ candidate: EventCandidate) -> PAMGuardEvent {
