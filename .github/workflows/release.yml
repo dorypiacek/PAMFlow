@@ -12,16 +12,11 @@ permissions:
 jobs:
   release:
     name: Build DMG and Publish Release
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Select Xcode 26.3
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app
-          xcodebuild -version
 
       - name: Read app version
         id: version
