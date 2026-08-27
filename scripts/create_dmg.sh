@@ -491,6 +491,9 @@ ensure_app_icon() {
     if [[ ! -s "$assets" ]]; then
         fail "Compiled asset catalog is missing from $app_bundle."
     fi
+
+    log "App icon name: $icon_name"
+    log "Compiled asset catalog: $assets"
 }
 
 push_version_tag_if_needed() {
@@ -649,12 +652,18 @@ log "Push version tag: $PUSH_VERSION_TAG"
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
     log "Building $APP_NAME ($CONFIGURATION)"
+    xcodebuild -version
+    if [[ ! -d "$ROOT_DIR/PAMFlow/Resources/$APP_ICON_NAME.icon" ]]; then
+        fail "Expected Icon Composer source at PAMFlow/Resources/$APP_ICON_NAME.icon."
+    fi
+
     xcodebuild \
         -project "$ROOT_DIR/$PROJECT_PATH" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
         -derivedDataPath "$ROOT_DIR/$DERIVED_DATA_PATH" \
         -destination 'platform=macOS' \
+        "ASSETCATALOG_COMPILER_APPICON_NAME=$APP_ICON_NAME" \
         build
 else
     log "Skipping build and packaging existing app"
