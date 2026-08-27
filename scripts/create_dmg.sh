@@ -24,7 +24,7 @@ BACKGROUND_PATH="$BACKGROUND_DIR/background.png"
 DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.dmg"
 TEMP_DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.temp.dmg"
 SWIFT_MODULE_CACHE_PATH="${SWIFT_MODULE_CACHE_PATH:-/tmp/pamflow-dmg-swift-module-cache}"
-APP_ICON_NAME="${APP_ICON_NAME:-pamflow}"
+APP_ICON_NAME="${APP_ICON_NAME:-AppIcon}"
 SHARKTRACK_RUNTIME_DESTINATION_NAME="SharkTrackRuntime"
 SHARKTRACK_RUNTIME_SOURCE="${SHARKTRACK_RUNTIME_SOURCE:-}"
 SHARKTRACK_SOURCE="${SHARKTRACK_SOURCE:-}"
@@ -474,49 +474,23 @@ create_applications_link() {
 
 ensure_app_icon() {
     local app_bundle="$1"
-    local icon_path="$app_bundle/Contents/Resources/$APP_ICON_NAME.icns"
-    local source_icon="$ROOT_DIR/PAMFlow/Resources/$APP_ICON_NAME.icon/Assets/Image.png"
-    local iconset_path="$ROOT_DIR/$STAGING_ROOT/$APP_ICON_NAME.iconset"
+    local plist="$app_bundle/Contents/Info.plist"
+    local assets="$app_bundle/Contents/Resources/Assets.car"
 
-    if [[ -s "$icon_path" ]]; then
-        return 0
+    local icon_name
+    icon_name="$(
+        /usr/libexec/PlistBuddy \
+            -c 'Print :CFBundleIconName' \
+            "$plist" 2>/dev/null || true
+    )"
+
+    if [[ "$icon_name" != "$APP_ICON_NAME" ]]; then
+        fail "App icon is not configured correctly. CFBundleIconName is '$icon_name', expected '$APP_ICON_NAME'."
     fi
 
-    if [[ ! -f "$source_icon" ]]; then
-        fail "App icon is missing from the app bundle and no fallback source icon was found at $source_icon."
+    if [[ ! -s "$assets" ]]; then
+        fail "Compiled asset catalog is missing from $app_bundle."
     fi
-
-    log "Creating fallback app icon"
-    rm -rf "$iconset_path"
-    mkdir -p "$iconset_path"
-
-    /usr/bin/sips -z 16 16 "$source_icon" --out "$iconset_path/icon_16x16.png" >/dev/null
-    /usr/bin/sips -z 32 32 "$source_icon" --out "$iconset_path/icon_16x16@2x.png" >/dev/null
-    /usr/bin/sips -z 32 32 "$source_icon" --out "$iconset_path/icon_32x32.png" >/dev/null
-    /usr/bin/sips -z 64 64 "$source_icon" --out "$iconset_path/icon_32x32@2x.png" >/dev/null
-    /usr/bin/sips -z 128 128 "$source_icon" --out "$iconset_path/icon_128x128.png" >/dev/null
-    /usr/bin/sips -z 256 256 "$source_icon" --out "$iconset_path/icon_128x128@2x.png" >/dev/null
-    /usr/bin/sips -z 256 256 "$source_icon" --out "$iconset_path/icon_256x256.png" >/dev/null
-    /usr/bin/sips -z 512 512 "$source_icon" --out "$iconset_path/icon_256x256@2x.png" >/dev/null
-    /usr/bin/sips -z 512 512 "$source_icon" --out "$iconset_path/icon_512x512.png" >/dev/null
-    /usr/bin/sips -z 1024 1024 "$source_icon" --out "$iconset_path/icon_512x512@2x.png" >/dev/null
-
-    /usr/bin/iconutil -c icns "$iconset_path" -o "$icon_path"
-    rm -rf "$iconset_path"
-
-    /usr/libexec/PlistBuddy \
-        -c "Set :CFBundleIconFile $APP_ICON_NAME" \
-        "$app_bundle/Contents/Info.plist" >/dev/null 2>&1 || \
-    /usr/libexec/PlistBuddy \
-        -c "Add :CFBundleIconFile string $APP_ICON_NAME" \
-        "$app_bundle/Contents/Info.plist" >/dev/null
-
-    /usr/libexec/PlistBuddy \
-        -c "Set :CFBundleIconName $APP_ICON_NAME" \
-        "$app_bundle/Contents/Info.plist" >/dev/null 2>&1 || \
-    /usr/libexec/PlistBuddy \
-        -c "Add :CFBundleIconName string $APP_ICON_NAME" \
-        "$app_bundle/Contents/Info.plist" >/dev/null
 }
 
 push_version_tag_if_needed() {

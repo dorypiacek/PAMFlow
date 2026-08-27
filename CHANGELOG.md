@@ -2,6 +2,11 @@
 
 All notable changes to PAMFlow are documented here.
 
+## 1.0.2 - 2026-08-27
+
+- Fixed GitHub Actions DMG builds to use the Icon Composer `AppIcon.icon` app icon.
+- Added release-package validation for `CFBundleIconName` and compiled `Assets.car`.
+
 ## 1.0.1 - 2026-08-26
 
 - Improved PAM audio spectrogram rendering quality with a wider 60 dB display range and Retina-aware raster sampling.

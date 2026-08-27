@@ -18,9 +18,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show Xcode version
+      - name: Select Xcode 26.3
         run: |
-          xcode-select -p
+          sudo xcode-select -s /Applications/Xcode_26.3.app
           xcodebuild -version
 
       - name: Read app version
