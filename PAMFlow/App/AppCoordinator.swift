@@ -16,6 +16,7 @@ protocol AppCoordinating: AnyObject {
     var selectedTheme: AppTheme { get set }
     var settingsErrorMessage: String? { get set }
     var dependencies: Dependencies { get }
+    var moduleCatalog: ModuleCatalog { get }
     var canGoBack: Bool { get }
     var canGoHome: Bool { get }
 
@@ -24,6 +25,7 @@ protocol AppCoordinating: AnyObject {
     func signOut()
     func selectTheme(_ theme: AppTheme)
     func openDataTypeSelection()
+    func openProjectSetup(moduleID: ModuleID)
     func openProjectSetup(module: WorkflowModule)
     func openProjectSelection()
     func goHome()
@@ -60,15 +62,18 @@ final class AppCoordinator: AppCoordinating {
 
     private let userProfileStore: UserProfileStoring
     private let appThemeStore: AppThemeStoring
+    let moduleCatalog: ModuleCatalog
 
     init(
         userProfileStore: UserProfileStoring,
         appThemeStore: AppThemeStoring,
-        dependencies: Dependencies
+        dependencies: Dependencies,
+        moduleCatalog: ModuleCatalog
     ) {
         self.userProfileStore = userProfileStore
         self.appThemeStore = appThemeStore
         self.dependencies = dependencies
+        self.moduleCatalog = moduleCatalog
         let profile = userProfileStore.load()
         self.userProfile = profile
         self.selectedTheme = appThemeStore.load()
@@ -130,6 +135,13 @@ final class AppCoordinator: AppCoordinating {
 
     func openDataTypeSelection() {
         route = .dataTypeSelection
+    }
+
+    func openProjectSetup(moduleID: ModuleID) {
+        guard let module = WorkflowModule(rawValue: moduleID.rawValue) else {
+            return
+        }
+        openProjectSetup(module: module)
     }
 
     func openProjectSetup(module: WorkflowModule) {
@@ -220,61 +232,15 @@ final class AppCoordinator: AppCoordinating {
 
     func continueProject(_ project: Project) {
         project.lastOpenedAt = .now
-        let module = WorkflowModule.module(for: project.moduleID)
 
-        switch project.workflowStatus {
-        case .created, .scanInProgress:
-            scanProject(project)
-        case .scanCompleted:
-            if module.requiresSharkTrack {
-                openSharkTrackProcessing(project)
-            } else {
-                openNewProjectOverview(project)
-            }
-        case .manualAuditInProgress:
-            openManualAudit(project)
-        case .manualAuditCompleted:
-            openManualAuditOverview(project)
-        case .pamguardSetupReady:
-            if module.usesPAMGuard {
-                openPAMGuardSetup(project)
-            } else {
-                openManualAuditOverview(project)
-            }
-        case .processingProjectCreated:
-            if module.requiresSharkTrack {
-                if hasReviewFrames(project) {
-                    openManualAudit(project)
-                } else {
-                    openManualAuditOverview(project)
-                }
-            } else {
-                openPAMGuardWaiting(project)
-            }
-        case .processingRunImported:
-            if module.usesPAMGuard {
-                openManualAuditOverview(project)
-            } else {
-                openNewProjectOverview(project)
-            }
-        case .runOverviewCompleted:
-            if module.usesPAMGuard {
-                openManualAudit(project)
-            } else {
-                openNewProjectOverview(project)
-            }
-        case .detectionReviewInProgress:
-            if module.usesPAMGuard {
-                openManualAudit(project, startAtLastReviewed: true)
-            } else {
-                openNewProjectOverview(project)
-            }
-        case .completed:
-            openProjectCompletion(project)
+        guard let module = moduleCatalog.module(for: ModuleID(rawValue: project.moduleID)) else {
+            openNewProjectOverview(project)
+            return
         }
-    }
 
-    private func hasReviewFrames(_ project: Project) -> Bool {
-        (try? dependencies.projectScanService.loadSummary(for: project).fileCount) ?? 0 > 0
+        module.makeCoordinator(
+            context: ModuleContext(dependencies: dependencies, appCoordinator: self)
+        )
+        .openLatestProject(project)
     }
 }

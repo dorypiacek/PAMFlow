@@ -22,7 +22,8 @@ struct PAMFlowApp: App {
             pamGuardPreparationService: PAMGuardPreparationService(),
             pamGuardDetectionProcessingService: PAMGuardDetectionProcessingService(),
             fileSelectionService: FileSelectionService()
-        )
+        ),
+        moduleCatalog: IncludedModules.makeCatalog()
     )
 
     var body: some Scene {

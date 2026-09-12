@@ -31,6 +31,6 @@ struct ModuleContext {
 protocol ModuleCoordinating: AnyObject {
     var moduleID: ModuleID { get }
 
-    func openLatestProject(_ project: ProjectIdentity)
-    func openReadOnlyProject(_ project: ProjectIdentity)
+    func openLatestProject(_ project: Project)
+    func openReadOnlyProject(_ project: Project)
 }

@@ -25,9 +25,9 @@ struct DataTypeSelectionView: View {
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: Spacing.large) {
-                    ForEach(WorkflowModule.allCases) { module in
+                    ForEach(appCoordinator.moduleCatalog.details, id: \.id) { module in
                         DataTypeButton(module: module) {
-                            appCoordinator.openProjectSetup(module: module)
+                            appCoordinator.openProjectSetup(moduleID: module.id)
                         }
                     }
                 }
@@ -45,21 +45,21 @@ struct DataTypeSelectionView: View {
 
 /// Large module-selection button used by `DataTypeSelectionView`.
 private struct DataTypeButton: View {
-    let module: WorkflowModule
+    let module: ModuleDetails
     let action: () -> Void
     @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: Spacing.medium) {
-                Image(systemName: module.selectionIconName)
+                Image(systemName: module.iconName)
                     .font(.system(size: Metrics.Layout.dataTypeIconSize, weight: .semibold))
 
-                Text(module.selectionTitle)
+                Text(module.title)
                     .font(Fonts.subtitle.bold())
                     .multilineTextAlignment(.center)
 
-                Text(module.selectionSubtitle)
+                Text(module.subtitle)
                     .font(Fonts.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

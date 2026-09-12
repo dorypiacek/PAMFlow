@@ -9,7 +9,9 @@ import Foundation
 /// Build-composition entry point for feature modules included in this app.
 @MainActor
 enum IncludedModules {
-    static func makeCatalog(context: ModuleContext) -> ModuleCatalog {
-        ModuleCatalog()
+    static func makeCatalog() -> ModuleCatalog {
+        ModuleCatalog(
+            modules: WorkflowModule.allCases.map { IncludedWorkflowModule(workflowModule: $0) }
+        )
     }
 }
