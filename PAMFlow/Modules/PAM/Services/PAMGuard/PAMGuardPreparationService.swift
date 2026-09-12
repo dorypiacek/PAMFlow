@@ -88,7 +88,7 @@ final class PAMGuardPreparationService: PAMGuardPreparationServicing {
             if accessedInput { sourceInputURL.stopAccessingSecurityScopedResource() }
         }
 
-        let pamguardURL = projectRootURL.appendingPathComponent(ProjectFileNames.pamguardDirectory)
+        let pamguardURL = projectRootURL.appendingPathComponent(PAMProjectFileNames.pamguardDirectory)
         let dbURL = pamguardURL.appendingPathComponent("db")
         let binaryURL = pamguardURL.appendingPathComponent("binary")
         let inputURL = pamguardURL.appendingPathComponent("input")

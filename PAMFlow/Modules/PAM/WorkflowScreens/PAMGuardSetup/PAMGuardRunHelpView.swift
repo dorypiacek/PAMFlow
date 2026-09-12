@@ -8,8 +8,11 @@
 import AppKit
 import SwiftUI
 
+/// Renders step-by-step instructions for running the generated PAMGuard template outside the app.
 struct PAMGuardRunHelpView: View {
+    /// Optional action that reveals the generated PAMGuard project folder in Finder.
     let onShowPamguardFolder: (() -> Void)?
+    /// Action used to dismiss the help sheet.
     let onClose: () -> Void
 
     var body: some View {
@@ -46,6 +49,7 @@ struct PAMGuardRunHelpView: View {
 }
 
 private struct PAMGuardHelpStepView: View {
+    /// Instructional step rendered by this row.
     let step: PAMGuardHelpStep
 
     var body: some View {
@@ -85,6 +89,7 @@ private struct PAMGuardHelpImage: View {
         static let imageSubdirectory = "PAMGuardHelp"
     }
 
+    /// Image asset name displayed for an instructional step.
     let name: String
 
     var body: some View {
@@ -118,21 +123,30 @@ private struct PAMGuardHelpImage: View {
 }
 
 private struct PAMGuardHelpStep: Identifiable {
+    /// One-based step number shown in the help sheet.
     let number: Int
+    /// Short instruction shown as the step heading.
     let title: String
+    /// Optional supporting instruction text.
     let detail: String?
+    /// Optional external documentation or download link.
     let link: PAMGuardHelpLink?
+    /// Ordered screenshot asset names displayed below the step.
     let images: [String]
 
+    /// Stable identifier used by SwiftUI lists.
     var id: Int { number }
 }
 
 private struct PAMGuardHelpLink {
+    /// Link text shown in the help sheet.
     let title: String
+    /// Destination opened when the user activates the link.
     let url: URL
 }
 
 private extension PAMGuardRunHelpView {
+    /// Ordered PAMGuard run instructions displayed in the help sheet.
     static let steps: [PAMGuardHelpStep] = [
         PAMGuardHelpStep(
             number: 1,

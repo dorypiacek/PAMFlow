@@ -88,7 +88,7 @@ protocol NewProjectOverviewViewModelType: AnyObject {
     /// Counts persisted audit decisions for the project.
     func auditDecisionCount(for project: Project, modelContext: ModelContext) -> Int
     /// Returns whether module processing has generated a detections folder for the project.
-    func hasGeneratedDetections(for project: Project) -> Bool
+    func hasGeneratedArtifacts(for project: Project, moduleCatalog: ModuleCatalog) -> Bool
     /// Deletes the project and its generated data before returning to module setup.
     func removeProjectAndReturnToSetup(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
     /// Clears manual-audit progress and returns to the previous scan step.
@@ -206,9 +206,16 @@ final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return (try? modelContext.fetch(descriptor).count) ?? 0
     }
 
-    func hasGeneratedDetections(for project: Project) -> Bool {
-        guard let rootFolderURL = project.rootFolderURL else { return false }
-        let detectionsURL = rootFolderURL.appendingPathComponent(ProjectFileNames.detectionsDirectory, isDirectory: true)
+    func hasGeneratedArtifacts(for project: Project, moduleCatalog: ModuleCatalog) -> Bool {
+        guard let rootFolderURL = project.rootFolderURL,
+              let details = moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details else { return false }
+        return details.generatedArtifactFolderNames.contains { folderName in
+            generatedArtifactExists(named: folderName, in: rootFolderURL)
+        }
+    }
+
+    private func generatedArtifactExists(named folderName: String, in rootFolderURL: URL) -> Bool {
+        let detectionsURL = rootFolderURL.appendingPathComponent(folderName, isDirectory: true)
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: detectionsURL.path, isDirectory: &isDirectory) &&
             isDirectory.boolValue

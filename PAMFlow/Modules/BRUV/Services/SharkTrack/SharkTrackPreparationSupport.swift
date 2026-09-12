@@ -46,11 +46,11 @@ nonisolated struct SharkTrackPreparationConfiguration: Sendable {
     var manifestFileName: String
 
     static let `default` = SharkTrackPreparationConfiguration(
-        detectionsDirectoryName: ProjectFileNames.detectionsDirectory,
+        detectionsDirectoryName: BRUVProjectFileNames.detectionsDirectory,
         workDirectoryName: ProjectFileNames.workDirectory,
-        internalOutputDirectoryName: ProjectFileNames.sharkTrackInternalDirectory,
+        internalOutputDirectoryName: BRUVProjectFileNames.sharkTrackInternalDirectory,
         scanSummaryFileName: ProjectFileNames.scanSummary,
-        manifestFileName: ProjectFileNames.sharkTrackManifest
+        manifestFileName: BRUVProjectFileNames.sharkTrackManifest
     )
 }
 
@@ -142,7 +142,7 @@ nonisolated struct SharkTrackMediaDiscovery: Sendable {
             case .video:
                 MediaFileExtensions.video
             case .image:
-                MediaFileExtensions.sharkTrackImage
+                BRUVMediaFileExtensions.sharkTrackImage
             }
         }
     }

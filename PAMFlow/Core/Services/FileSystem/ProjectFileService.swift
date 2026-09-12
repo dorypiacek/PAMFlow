@@ -233,12 +233,7 @@ final class ProjectFileService: ProjectFileServicing {
     }
 
     private func createProjectSubfolders(in rootURL: URL, moduleID: String) throws {
-        var folders = [ProjectFileNames.workDirectory]
-        if WorkflowModule.module(for: moduleID).usesPAMGuard {
-            folders.append(ProjectFileNames.pamguardDirectory)
-        }
-
-        for folder in folders {
+        for folder in GeneratedProjectArtifacts.folderNames.filter({ $0 != ProjectFileNames.sourceDirectory }) {
             try FileManager.default.createDirectory(
                 at: rootURL.appendingPathComponent(folder),
                 withIntermediateDirectories: true
@@ -360,10 +355,7 @@ final class ProjectFileService: ProjectFileServicing {
         let fileManager = FileManager.default
         let temporaryURLs = [
             rootFolderURL.appendingPathComponent(ProjectFileNames.workDirectory, isDirectory: true),
-            rootFolderURL.appendingPathComponent(ProjectFileNames.scanSummary),
-            rootFolderURL
-                .appendingPathComponent(ProjectFileNames.detectionsDirectory, isDirectory: true)
-                .appendingPathComponent(ProjectFileNames.sharkTrackManifest)
+            rootFolderURL.appendingPathComponent(ProjectFileNames.scanSummary)
         ]
 
         for url in temporaryURLs where fileManager.fileExists(atPath: url.path) {

@@ -107,7 +107,7 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
 
         let previewFolderURL = projectRootURL
             .appendingPathComponent(ProjectFileNames.workDirectory)
-            .appendingPathComponent(ProjectFileNames.pamguardDetectionPreviewDirectory)
+            .appendingPathComponent(PAMProjectFileNames.pamguardDetectionPreviewDirectory)
         try FileManager.default.createDirectory(at: previewFolderURL, withIntermediateDirectories: true)
 
         let reviewFiles = try events.enumerated().map { offset, event in
@@ -160,13 +160,13 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
 
     nonisolated private func databaseURL(projectRootURL: URL) throws -> URL {
         let dbFolderURL = projectRootURL
-            .appendingPathComponent(ProjectFileNames.pamguardDirectory)
-            .appendingPathComponent(ProjectFileNames.pamguardDatabaseDirectory)
+            .appendingPathComponent(PAMProjectFileNames.pamguardDirectory)
+            .appendingPathComponent(PAMProjectFileNames.pamguardDatabaseDirectory)
         let candidates = ((try? FileManager.default.contentsOfDirectory(
             at: dbFolderURL,
             includingPropertiesForKeys: nil
         )) ?? [])
-            .filter { MediaFileExtensions.pamguardDatabase.contains($0.pathExtension.lowercased()) }
+            .filter { PAMMediaFileExtensions.pamguardDatabase.contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
 
         guard let first = candidates.first else {
@@ -177,8 +177,8 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
 
     nonisolated private func binaryFolderURL(projectRootURL: URL) throws -> URL {
         let binaryFolderURL = projectRootURL
-            .appendingPathComponent(ProjectFileNames.pamguardDirectory)
-            .appendingPathComponent(ProjectFileNames.pamguardBinaryDirectory)
+            .appendingPathComponent(PAMProjectFileNames.pamguardDirectory)
+            .appendingPathComponent(PAMProjectFileNames.pamguardBinaryDirectory)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: binaryFolderURL.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
@@ -198,7 +198,7 @@ final class PAMGuardDetectionProcessingService: PAMGuardDetectionProcessingServi
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         )?.allObjects as? [URL]) ?? [])
-            .filter { MediaFileExtensions.pamguardBinary.contains($0.pathExtension.lowercased()) }
+            .filter { PAMMediaFileExtensions.pamguardBinary.contains($0.pathExtension.lowercased()) }
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
 
         var detections: [PAMGuardDetection] = []

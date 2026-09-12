@@ -36,9 +36,9 @@ struct StaticIncludedModuleProvider: IncludedModuleProviding {
         case .pam:
             PAMWorkflowModule()
         case .bruv:
-            BRUVWorkflowModule()
+            BRUVWorkflowModule(projectType: .bruv)
         case .ruv:
-            RUVWorkflowModule()
+            BRUVWorkflowModule(projectType: .ruv)
         }
     }
 }

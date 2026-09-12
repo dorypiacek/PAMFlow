@@ -61,7 +61,7 @@ final class PAMGuardWaitingViewModel: PAMGuardWaitingViewModelType {
                 }
             }
 
-            FileSelectionService.revealInFinder(projectRootURL.appendingPathComponent(ProjectFileNames.pamguardDirectory))
+            FileSelectionService.revealInFinder(projectRootURL.appendingPathComponent(PAMProjectFileNames.pamguardDirectory))
         }
     }
 

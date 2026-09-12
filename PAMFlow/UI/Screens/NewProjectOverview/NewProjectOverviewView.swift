@@ -274,7 +274,7 @@ private extension NewProjectOverviewView {
             return
         }
 
-        if viewModel.hasGeneratedDetections(for: project) ||
+        if viewModel.hasGeneratedArtifacts(for: project, moduleCatalog: appCoordinator.moduleCatalog) ||
             viewModel.auditDecisionCount(for: project, modelContext: modelContext) > 0 {
             showsBackToSetupWarning = true
         } else {

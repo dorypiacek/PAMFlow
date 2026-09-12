@@ -170,7 +170,7 @@ final class PAMGuardSetupViewModel: PAMGuardSetupViewModelType {
             }
         }
 
-        let pamguardURL = projectRootURL.appendingPathComponent(ProjectFileNames.pamguardDirectory, isDirectory: true)
+        let pamguardURL = projectRootURL.appendingPathComponent(PAMProjectFileNames.pamguardDirectory, isDirectory: true)
         let inputURL = pamguardURL.appendingPathComponent("input", isDirectory: true)
         guard let templateURL = firstTemplateURL(in: pamguardURL) else {
             return nil

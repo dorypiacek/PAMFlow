@@ -896,7 +896,7 @@ struct ProjectExportField: Identifiable {
     private static func eventID(_ file: ProjectScanFile) -> String {
         file.relativePath
             .replacingOccurrences(of: "\(PAMGuardPreview.relativeEventDirectory)/", with: "")
-            .replacingOccurrences(of: "\(ProjectFileNames.pamguardDirectory)/\(ProjectFileNames.detectionsDirectory)/", with: "")
+            .replacingOccurrences(of: "\(PAMProjectFileNames.pamguardDirectory)/\(PAMProjectFileNames.pamguardDetectionsDirectory)/", with: "")
             .replacingOccurrences(of: ".\(PAMExportFileNames.spectrogramImageExtension)", with: "")
     }
 
