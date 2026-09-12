@@ -15,20 +15,22 @@ struct ProjectCompletionView: View {
     let projectID: UUID
     let projectScanService: ProjectScanServicing
 
-    @State private var summary: ProjectScanSummary?
-    @State private var selectedFieldIDs: [String]?
-    @State private var isCustomisingFields = false
-    @State private var errorMessage: String?
-    @State private var successMessage: String?
+    @State private var viewModel: ProjectCompletionViewModel
+
+    init(projectID: UUID, projectScanService: ProjectScanServicing) {
+        self.projectID = projectID
+        self.projectScanService = projectScanService
+        _viewModel = State(initialValue: ProjectCompletionViewModel(projectID: projectID, projectScanService: projectScanService))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
-            if let project = fetchProject(), let summary {
+            if let project = viewModel.fetchProject(modelContext: modelContext), let summary = viewModel.summary {
                 let module = WorkflowModule.module(for: project.moduleID)
-                let decisions = auditDecisions(for: project)
-                let fields = activeFields(for: module)
+                let decisions = viewModel.auditDecisions(for: project, modelContext: modelContext)
+                let fields = viewModel.activeFields(for: module)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.medium) {
@@ -41,7 +43,7 @@ struct ProjectCompletionView: View {
                 .safeAreaInset(edge: .bottom) {
                     completionActionBar(project: project, summary: summary, decisions: decisions, fields: fields)
                 }
-            } else if let project = fetchProject(), let errorMessage {
+            } else if let project = viewModel.fetchProject(modelContext: modelContext), let errorMessage = viewModel.errorMessage {
                 unavailableProjectContent(project: project, message: errorMessage)
             } else {
                 ProgressView()
@@ -49,18 +51,17 @@ struct ProjectCompletionView: View {
             }
         }
         .background(AppColors.background)
-        .task { loadSummary() }
-        .sheet(isPresented: $isCustomisingFields) {
-            if let project = fetchProject() {
+        .task { viewModel.loadSummary(modelContext: modelContext) }
+        .sheet(isPresented: $viewModel.isCustomisingFields) {
+            if let project = viewModel.fetchProject(modelContext: modelContext) {
                 ExportFieldCustomisationSheet(
                     module: WorkflowModule.module(for: project.moduleID),
-                    selectedFieldIDs: activeFieldIDs(for: WorkflowModule.module(for: project.moduleID)),
+                    selectedFieldIDs: viewModel.activeFieldIDs(for: WorkflowModule.module(for: project.moduleID)),
                     onSave: {
                         let module = WorkflowModule.module(for: project.moduleID)
-                        selectedFieldIDs = $0
-                        UserDefaults.standard.set($0, forKey: exportFieldDefaultsKey(module))
+                        viewModel.saveFieldIDs($0, for: module)
                     },
-                    onClose: { isCustomisingFields = false }
+                    onClose: { viewModel.isCustomisingFields = false }
                 )
             }
         }
@@ -89,15 +90,15 @@ struct ProjectCompletionView: View {
 
             reportFieldsPreview(fields)
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .foregroundStyle(AppColors.error)
-            }
+        if let errorMessage = viewModel.errorMessage {
+            Text(errorMessage)
+                .foregroundStyle(AppColors.error)
+        }
         }
     }
 
     private func unavailableProjectContent(project: Project, message: String) -> some View {
-        let decisions = auditDecisions(for: project)
+        let decisions = viewModel.auditDecisions(for: project, modelContext: modelContext)
         let valid = decisions.filter { $0.decision == .valid }.count
         let unsure = decisions.filter { $0.decision == .unsure }.count
         let invalid = decisions.filter { $0.decision == .invalid }.count
@@ -141,8 +142,8 @@ struct ProjectCompletionView: View {
                         spacing: Spacing.small
                     ) {
                         overviewMetric(Strings.ProjectCompletion.project, project.name)
-                        overviewMetric(Strings.ProjectCompletion.type, moduleName(for: project))
-                        overviewMetric(Strings.ProjectCompletion.processedBy, processedBy(for: project))
+                        overviewMetric(Strings.ProjectCompletion.type, viewModel.moduleName(for: project, appCoordinator: appCoordinator))
+                        overviewMetric(Strings.ProjectCompletion.processedBy, viewModel.processedBy(for: project, appCoordinator: appCoordinator))
                         overviewMetric(Strings.Common.status, project.workflowStatus.title)
                         if let rootFolderURL = project.rootFolderURL {
                             overviewPathMetric(Strings.ProjectCompletion.projectFolder, rootFolderURL.path)
@@ -175,7 +176,7 @@ struct ProjectCompletionView: View {
                     .buttonStyle(.primaryAction)
 
                     Button(Strings.ProjectCompletion.deleteProject, role: .destructive) {
-                        deleteUnavailableProject(project)
+                        viewModel.deleteUnavailableProject(project, modelContext: modelContext, appCoordinator: appCoordinator)
                     }
                     .buttonStyle(.secondaryAction)
                 }
@@ -193,23 +194,17 @@ struct ProjectCompletionView: View {
     ) -> some View {
         HStack(spacing: Spacing.medium) {
             Button(Strings.ProjectCompletion.exportDetections) {
-                if WorkflowModule.module(for: project.moduleID) == .pamAudio {
-                    exportPAMPackage(project: project, summary: summary, decisions: decisions)
-                } else {
-                    export(project: project, summary: summary, decisions: decisions, fields: fields, separator: ",", fileExtension: "csv")
-                }
+                viewModel.export(project: project, decisions: decisions, fields: fields, modelContext: modelContext, appCoordinator: appCoordinator)
             }
             .buttonStyle(.primaryAction)
             .disabled(WorkflowModule.module(for: project.moduleID) != .pamAudio && fields.isEmpty)
 
             Button(Strings.ProjectCompletion.complete) {
-                if completeProject(project, summary: summary) {
-                    appCoordinator.openProjectSelection()
-                }
+                viewModel.complete(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
             }
             .buttonStyle(.secondaryAction)
 
-            if let successMessage {
+            if let successMessage = viewModel.successMessage {
                 Text(successMessage)
                     .font(Fonts.caption)
                     .foregroundStyle(AppColors.success)
@@ -250,7 +245,7 @@ struct ProjectCompletionView: View {
                 Spacer()
 
                 Button(Strings.ProjectCompletion.customiseFields) {
-                    isCustomisingFields = true
+                    viewModel.isCustomisingFields = true
                 }
                 .buttonStyle(.secondaryAction)
             }
@@ -294,7 +289,7 @@ struct ProjectCompletionView: View {
         fields: [ProjectExportField]
     ) -> some View {
         let module = WorkflowModule.module(for: project.moduleID)
-        let processedBy = processedBy(for: project)
+        let processedBy = viewModel.processedBy(for: project, appCoordinator: appCoordinator)
 
         return VStack(alignment: .leading, spacing: Spacing.medium) {
             Text(Strings.ProjectCompletion.projectOverview)
@@ -306,14 +301,14 @@ struct ProjectCompletionView: View {
                 spacing: Spacing.small
             ) {
                 overviewMetric(Strings.ProjectCompletion.project, project.name)
-                overviewMetric(Strings.ProjectCompletion.type, moduleName(for: project))
+                overviewMetric(Strings.ProjectCompletion.type, viewModel.moduleName(for: project, appCoordinator: appCoordinator))
                 overviewMetric(Strings.ProjectCompletion.processedBy, processedBy)
                 overviewMetric(Strings.Common.status, project.workflowStatus.title)
                 overviewPathMetric(Strings.ProjectCompletion.inputFolder, project.rawInputFolderURL?.path ?? summary.inputFolder)
                 overviewMetric("Total size", ByteCountFormatter.string(fromByteCount: Int64(summary.totalSizeBytes), countStyle: .file))
                 overviewMetric("Files", "\(summary.fileCount)")
                 if module == .pamAudio {
-                    overviewMetric("Duration range", durationRange(summary))
+                    overviewMetric("Duration range", viewModel.durationRange(summary))
                     overviewMetric("Sample rates", summary.sampleRatesHz.map { "\($0) Hz" }.joined(separator: ", "))
                     overviewMetric("Channels", summary.channelCounts.map(String.init).joined(separator: ", "))
                 }
@@ -390,199 +385,6 @@ struct ProjectCompletionView: View {
         .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
     }
 
-    private func durationRange(_ summary: ProjectScanSummary) -> String {
-        guard let min = summary.durationMinSeconds, let max = summary.durationMaxSeconds else {
-            return Strings.Common.unknown
-        }
-
-        return "\(formatDuration(min)) - \(formatDuration(max))"
-    }
-
-    private func formatDuration(_ seconds: Double) -> String {
-        let totalSeconds = Int(seconds.rounded())
-        let minutes = totalSeconds / 60
-        let remainingSeconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, remainingSeconds)
-    }
-
-    private func activeFields(for module: WorkflowModule) -> [ProjectExportField] {
-        activeFieldIDs(for: module).compactMap { ProjectExportField.field(id: $0, module: module) }
-    }
-
-    private func activeFieldIDs(for module: WorkflowModule) -> [String] {
-        if let selectedFieldIDs {
-            return selectedFieldIDs
-        }
-        if let saved = UserDefaults.standard.stringArray(forKey: exportFieldDefaultsKey(module)) {
-            return ProjectExportField.includingRequiredDefaults(saved, for: module)
-        }
-        return ProjectExportField.defaults(for: module).map(\.id)
-    }
-
-    private func export(
-        project: Project,
-        summary: ProjectScanSummary,
-        decisions: [ManualAuditDecision],
-        fields: [ProjectExportField],
-        separator: String,
-        fileExtension: String
-    ) {
-        guard let url = appCoordinator.dependencies.fileSelectionService.selectSaveDestination(
-            defaultName: "\(project.name)_detections.\(fileExtension)",
-            canCreateDirectories: true
-        ) else { return }
-
-        do {
-            let report = ProjectExportReport(
-                project: project,
-                summary: summary,
-                decisions: decisions,
-                fields: fields,
-                separator: separator,
-                processedBy: processedBy(for: project)
-            )
-            try report.string.write(to: url, atomically: true, encoding: .utf8)
-            if completeProject(project, summary: summary) {
-                successMessage = String(format: Strings.ProjectCompletion.exportSuccessFormat, url.lastPathComponent)
-                errorMessage = nil
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            successMessage = nil
-        }
-    }
-
-    private func exportPAMPackage(
-        project: Project,
-        summary: ProjectScanSummary,
-        decisions: [ManualAuditDecision]
-    ) {
-        guard let url = appCoordinator.dependencies.fileSelectionService.selectSaveDestination(
-            defaultName: "\(project.name)_detections",
-            canCreateDirectories: true
-        ) else { return }
-
-        do {
-            let exporter = PAMDetectionPackageExporter(
-                project: project,
-                summary: summary,
-                decisions: decisions,
-                processedBy: processedBy(for: project)
-            )
-            try exporter.writePackage(to: url)
-            if completeProject(project, summary: summary) {
-                successMessage = String(format: Strings.ProjectCompletion.exportSuccessFormat, url.lastPathComponent)
-                errorMessage = nil
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            successMessage = nil
-        }
-    }
-
-    private func exportFieldDefaultsKey(_ module: WorkflowModule) -> String {
-        "pamflow.export.fields.\(module.id)"
-    }
-
-    private func moduleName(for project: Project) -> String {
-        appCoordinator.moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details.name ?? project.moduleID
-    }
-
-    private func loadSummary() {
-        guard let project = fetchProject() else {
-            errorMessage = Strings.Common.projectNotFound
-            return
-        }
-
-        do {
-            summary = try projectScanService.loadSummary(for: project)
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func deleteUnavailableProject(_ project: Project) {
-        do {
-            try appCoordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
-            deleteAuditDecisions(for: project)
-            modelContext.delete(project)
-            try modelContext.save()
-            appCoordinator.openProjectSelection()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func deleteAuditDecisions(for project: Project) {
-        let projectID = project.id
-        let descriptor = FetchDescriptor<ManualAuditDecision>(
-            predicate: #Predicate { decision in
-                decision.projectID == projectID
-            }
-        )
-        guard let decisions = try? modelContext.fetch(descriptor) else { return }
-
-        for decision in decisions {
-            modelContext.delete(decision)
-        }
-    }
-
-    @discardableResult
-    private func completeProject(_ project: Project, summary: ProjectScanSummary) -> Bool {
-        if project.completedBy?.trimmed.isEmpty ?? true {
-            project.completedBy = currentReviewerName
-        }
-        project.workflowStatus = .completed
-        project.lastOpenedAt = .now
-        do {
-            if let rootFolderURL = project.rootFolderURL {
-                do {
-                    try ProjectScanService.writeSummary(summary, projectRootURL: rootFolderURL)
-                } catch {
-                    AppLog.info("Project completion skipped internal scan summary refresh: \(error.localizedDescription)")
-                }
-            }
-            try project.storeScanSummary(summary)
-            try modelContext.save()
-            try appCoordinator.dependencies.projectFileService.removeTemporaryArtifacts(for: project)
-            return true
-        } catch {
-            errorMessage = Strings.ProjectCompletion.completionSaveFailed
-            return false
-        }
-    }
-
-    private func auditDecisions(for project: Project) -> [ManualAuditDecision] {
-        let projectID = project.id
-        let descriptor = FetchDescriptor<ManualAuditDecision>(
-            predicate: #Predicate { decision in
-                decision.projectID == projectID
-            }
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
-    }
-
-    private func fetchProject() -> Project? {
-        let descriptor = FetchDescriptor<Project>(
-            predicate: #Predicate { project in
-                project.id == projectID
-            }
-        )
-        return try? modelContext.fetch(descriptor).first
-    }
-
-    private var currentReviewerName: String {
-        appCoordinator.userProfile?.name.trimmed ?? Strings.Common.unknownUser
-    }
-
-    private func processedBy(for project: Project) -> String {
-        guard let completedBy = project.completedBy?.trimmed, !completedBy.isEmpty else {
-            return currentReviewerName
-        }
-
-        return completedBy
-    }
 }
 
 private struct ExportFieldCustomisationSheet: View {

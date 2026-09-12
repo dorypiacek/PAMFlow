@@ -1,5 +1,5 @@
 //
-//  ManualAuditOverviewScreenModel.swift
+//  ManualAuditOverviewViewModel.swift
 //  PAMFlow
 //
 //  Created by Dory on 12/08/2026.
@@ -8,18 +8,45 @@
 import Foundation
 import SwiftData
 
-/// Loads and owns screen state for manual audit overview while keeping SwiftUI rendering stateless.
+/// Defines state and commands for the manual-audit overview screen.
+@MainActor
+protocol ManualAuditOverviewViewModelType: AnyObject {
+    /// Loaded project associated with the overview.
+    var project: Project? { get }
+    /// Loaded scan summary used to build overview metrics.
+    var summary: ProjectScanSummary? { get }
+    /// User-facing load or persistence error.
+    var errorMessage: String? { get }
+
+    /// Loads the project and scan summary from persistence.
+    func load(modelContext: ModelContext)
+    /// Builds the deterministic presentation model for current persisted audit decisions.
+    func overviewModel(modelContext: ModelContext) -> ManualAuditOverviewPresentation?
+    /// Applies the primary overview action and delegates navigation to the coordinator.
+    func completePrimaryAction(
+        modelContext: ModelContext,
+        overview: ManualAuditOverviewPresentation,
+        coordinator: AppCoordinating
+    ) throws
+}
+
+/// View model for manual-audit overview state and workflow transitions.
 @MainActor
 @Observable
-final class ManualAuditOverviewScreenModel {
+final class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
+    /// Identifier of the project represented by this overview.
     private let projectID: UUID
+    /// Service used to load the scan summary for overview metrics.
     private let projectScanService: ProjectScanServicing
 
+    /// Loaded project associated with the overview.
     private(set) var project: Project?
+    /// Loaded scan summary used to build overview metrics.
     private(set) var summary: ProjectScanSummary?
+    /// User-facing load or persistence error.
     private(set) var errorMessage: String?
 
-    /// Creates a screen model for a specific project overview.
+    /// Creates a ViewModel for a specific project overview.
     init(projectID: UUID, projectScanService: ProjectScanServicing) {
         self.projectID = projectID
         self.projectScanService = projectScanService
@@ -46,9 +73,9 @@ final class ManualAuditOverviewScreenModel {
     }
 
     /// Builds the deterministic presentation model for current persisted audit decisions.
-    func overviewModel(modelContext: ModelContext) -> ManualAuditOverviewModel? {
+    func overviewModel(modelContext: ModelContext) -> ManualAuditOverviewPresentation? {
         guard let project, let summary else { return nil }
-        return ManualAuditOverviewModel(
+        return ManualAuditOverviewPresentation(
             project: project,
             summary: summary,
             decisions: auditDecisions(for: project, modelContext: modelContext)
@@ -58,7 +85,7 @@ final class ManualAuditOverviewScreenModel {
     /// Applies the primary overview action and delegates navigation to the coordinator.
     func completePrimaryAction(
         modelContext: ModelContext,
-        overview: ManualAuditOverviewModel,
+        overview: ManualAuditOverviewPresentation,
         coordinator: AppCoordinating
     ) throws {
         let project = overview.project
@@ -68,7 +95,7 @@ final class ManualAuditOverviewScreenModel {
             project.workflowStatus = overview.isPAMGuardDetectionReview ? .detectionReviewInProgress : .manualAuditInProgress
             project.lastOpenedAt = .now
             try modelContext.save()
-            coordinator.openManualAudit(project, startAtLastReviewed: true)
+            coordinator.goToNextStep(for: project, startAtLastReviewed: true)
             return
         }
 
@@ -78,17 +105,7 @@ final class ManualAuditOverviewScreenModel {
         project.lastOpenedAt = .now
         try modelContext.save()
 
-        if opensCompletion {
-            coordinator.openProjectCompletion(project)
-            return
-        }
-
-        if overview.module.usesPAMGuard {
-            coordinator.openPAMGuardSetup(project)
-            return
-        }
-
-        coordinator.openProjectCompletion(project)
+        coordinator.goToNextStep(for: project)
     }
 
     private func fetchProject(modelContext: ModelContext) -> Project? {

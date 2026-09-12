@@ -1,33 +1,89 @@
 //
-//  ManualAuditModel.swift
+//  ManualAuditViewModel.swift
 //  PAMFlow
 //
 //  Created by Dory on 08/06/2026.
 //
 
+import AppKit
 import Foundation
 import Observation
 import SwiftData
 
-/// State and actions for manual audit.
+/// Defines state and actions for manual audit.
 ///
-/// The model loads scan evidence, tracks the selected file, manages preview
+/// The ViewModel loads scan evidence, tracks the selected file, manages preview
 /// generation, and persists human decisions.
+@MainActor
+protocol ManualAuditViewModelType: AnyObject {
+    /// Loaded scan summary containing the files or detections under review.
+    var summary: ProjectScanSummary? { get }
+    /// Index of the currently selected file within `summary.files`.
+    var selectedIndex: Int { get set }
+    /// Generated audio waveform preview for the selected file.
+    var preview: AudioPreview? { get }
+    /// User-facing loading, preview, or persistence error.
+    var errorMessage: String? { get }
+    /// Indicates whether an audio preview is currently being generated.
+    var isLoadingPreview: Bool { get }
+    /// Currently selected scan file, if the loaded summary contains the selected index.
+    var selectedFile: ProjectScanFile? { get }
+    /// Human-readable position within the review queue.
+    var progressText: String { get }
+    /// Indicates whether the selected index can move backward.
+    var canMovePrevious: Bool { get }
+    /// Indicates whether the selected index can move forward.
+    var canMoveNextByIndex: Bool { get }
+    /// Human-readable video position for frame-based detections.
+    var videoProgressText: String? { get }
+
+    /// Builds the title text for the current review mode.
+    func reviewHeaderText(projectName: String, module: WorkflowModule) -> String
+    /// Fetches the project associated with the manual-audit screen.
+    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project?
+    /// Loads scan evidence, sorts it for review, selects the initial file, and starts preview work.
+    func load(project: Project, modelContext: ModelContext, startAtLastReviewed: Bool)
+    /// Cancels preview generation and clears preview cache state owned by this screen.
+    func cancelPreviewWork()
+    /// Loads or regenerates the audio preview for the selected file.
+    func loadPreview(project: Project)
+    /// Persists the free-text or selected reason attached to the current decision.
+    func saveInvalidReason(_ reason: String, project: Project, modelContext: ModelContext)
+    /// Returns the audit reason configuration for the current module and review mode.
+    func reasonConfiguration(for project: Project) -> AuditReasonConfiguration
+    /// Resolves the preview image URL for frame-based detections.
+    func sharkTrackPreviewURL(file: ProjectScanFile, project: Project) -> URL?
+    /// Loads the preview image for frame-based detections while respecting security scope.
+    func sharkTrackImage(file: ProjectScanFile, project: Project) -> NSImage?
+}
+
+/// View model for queue navigation, preview generation, and manual decision persistence.
 @Observable
 @MainActor
-final class ManualAuditModel {
+final class ManualAuditViewModel: ManualAuditViewModelType {
+    /// Loaded scan summary containing the files or detections under review.
     var summary: ProjectScanSummary?
+    /// Index of the currently selected file within `summary.files`.
     var selectedIndex = 0
+    /// Generated audio waveform preview for the selected file.
     var preview: AudioPreview?
+    /// User-facing loading, preview, or persistence error.
     var errorMessage: String?
+    /// Indicates whether an audio preview is currently being generated.
     var isLoadingPreview = false
 
+    /// Service used to load scan summaries for audit.
     private let projectScanService: ProjectScanServicing
+    /// Service used to generate, cache, and preheat audio previews.
     private let audioPreviewCacheService: AudioPreviewCacheServicing
+    /// Active preview generation task for the selected file.
     private var previewTask: Task<Void, Never>?
+    /// Preview preheating tasks keyed by media path and clip range.
     private var prewarmTasks: [String: Task<Void, Never>] = [:]
+    /// Number of upcoming previews to warm after the selected file.
     private let prewarmCount = Metrics.Cache.manualAuditPrewarmCount
 
+    /// Creates a manual-audit ViewModel with injectable scan and audio-preview services.
     init(projectScanService: ProjectScanServicing, audioPreviewCacheService: AudioPreviewCacheServicing) {
         self.projectScanService = projectScanService
         self.audioPreviewCacheService = audioPreviewCacheService
@@ -91,6 +147,15 @@ final class ManualAuditModel {
         let videoFiles = files.filter { $0.sourceVideo == sourceVideo }
         let detectionIndex = (videoFiles.firstIndex(where: { $0.relativePath == selectedFile.relativePath }) ?? 0) + 1
         return "\(projectName) - Video \(videoIndex)/\(videos.count) - Detection \(detectionIndex)/\(videoFiles.count)"
+    }
+
+    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { project in
+                project.id == projectID
+            }
+        )
+        return try? modelContext.fetch(descriptor).first
     }
 
     func load(project: Project, modelContext: ModelContext, startAtLastReviewed: Bool = false) {
@@ -269,6 +334,27 @@ final class ManualAuditModel {
             }
         )
         return try? modelContext.fetch(descriptor).first
+    }
+
+    func saveInvalidReason(_ reason: String, project: Project, modelContext: ModelContext) {
+        guard let file = selectedFile,
+              let auditDecision = auditDecision(for: file, project: project, modelContext: modelContext) else {
+            return
+        }
+        auditDecision.notes = reason
+        auditDecision.updatedAt = .now
+        try? modelContext.save()
+    }
+
+    func reasonConfiguration(for project: Project) -> AuditReasonConfiguration {
+        let module = WorkflowModule.module(for: project.moduleID)
+        if module == .pamAudio {
+            return isPAMGuardDetectionReview(project: project)
+                ? .pamDetectionReview()
+                : .manualAudit()
+        }
+
+        return .freeTextOptional()
     }
 
     func decision(
@@ -530,6 +616,36 @@ final class ManualAuditModel {
         let sourcePath = file.sourceVideo ?? file.relativePath
         guard isSupportedAudioPath(sourcePath) else { return nil }
         return inputFolderURL.appendingPathComponent(sourcePath)
+    }
+
+    func sharkTrackPreviewURL(file: ProjectScanFile, project: Project) -> URL? {
+        let relativePath = file.sharkTrackPreviewPath ?? file.relativePath
+        if isPAMGuardDetectionReview(project: project) {
+            return project.rootFolderURL?.appendingPathComponent(relativePath)
+        }
+        if let rootURL = project.rootFolderURL?.appendingPathComponent(relativePath),
+           FileManager.default.fileExists(atPath: rootURL.path) {
+            return rootURL
+        }
+        return project.inputFolderURL?.appendingPathComponent(relativePath)
+    }
+
+    func sharkTrackImage(file: ProjectScanFile, project: Project) -> NSImage? {
+        guard let previewURL = sharkTrackPreviewURL(file: file, project: project) else {
+            return nil
+        }
+
+        let scopedURL = previewURL.path.hasPrefix(project.rootFolderURL?.path ?? "")
+            ? project.rootFolderURL
+            : project.inputFolderURL
+        let accessed = scopedURL?.startAccessingSecurityScopedResource() ?? false
+        defer {
+            if accessed {
+                scopedURL?.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        return NSImage(contentsOf: previewURL)
     }
 
     func clipStartSeconds(project: Project, file: ProjectScanFile) -> Double? {

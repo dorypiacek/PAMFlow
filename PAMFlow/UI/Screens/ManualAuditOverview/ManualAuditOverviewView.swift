@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-/// Summary screen shown after manual audit decisions have been completed.
+/// Renders manual-audit summary state and forwards workflow actions to its ViewModel.
 struct ManualAuditOverviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
@@ -16,14 +16,14 @@ struct ManualAuditOverviewView: View {
     let projectID: UUID
     let projectScanService: ProjectScanServicing
 
-    @State private var screenModel: ManualAuditOverviewScreenModel
+    @State private var viewModel: ManualAuditOverviewViewModel
     @State private var isSpeciesExpanded = true
     @State private var isMediaBreakdownExpanded = false
 
     init(projectID: UUID, projectScanService: ProjectScanServicing) {
         self.projectID = projectID
         self.projectScanService = projectScanService
-        _screenModel = State(wrappedValue: ManualAuditOverviewScreenModel(
+        _viewModel = State(initialValue: ManualAuditOverviewViewModel(
             projectID: projectID,
             projectScanService: projectScanService
         ))
@@ -34,16 +34,16 @@ struct ManualAuditOverviewView: View {
             TopBarView()
 
             ScrollView {
-                let overview = screenModel.overviewModel(modelContext: modelContext)
+                let overview = viewModel.overviewModel(modelContext: modelContext)
                 VStack(alignment: .leading, spacing: Spacing.large) {
                     header(
                         title: overview?.title ?? Strings.ManualAuditOverview.title,
                         subtitle: overview?.subtitle ?? Strings.ManualAuditOverview.subtitle
                     )
 
-                    if let model = overview {
-                        overviewContent(model)
-                    } else if let errorMessage = screenModel.errorMessage {
+                    if let presentation = overview {
+                        overviewContent(presentation)
+                    } else if let errorMessage = viewModel.errorMessage {
                         Text(errorMessage)
                             .foregroundStyle(AppColors.error)
                     } else {
@@ -57,7 +57,7 @@ struct ManualAuditOverviewView: View {
         }
         .background(AppColors.background)
         .task {
-            screenModel.load(modelContext: modelContext)
+            viewModel.load(modelContext: modelContext)
         }
     }
 
@@ -72,27 +72,27 @@ struct ManualAuditOverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func overviewContent(_ model: ManualAuditOverviewModel) -> some View {
+    private func overviewContent(_ presentation: ManualAuditOverviewPresentation) -> some View {
         VStack(alignment: .leading, spacing: Spacing.large) {
             HighlightBlockView(
-                count: "\(model.reviewedCount)",
-                title: String(format: Strings.ManualAuditOverview.reviewedTitleFormat, model.totalCount),
+                count: "\(presentation.reviewedCount)",
+                title: String(format: Strings.ManualAuditOverview.reviewedTitleFormat, presentation.totalCount),
                 metrics: [
-                    HighlightMetric(Strings.ManualAuditOverview.project, model.project.name),
-                    HighlightMetric(Strings.ManualAuditOverview.valid, "\(model.validCount)", valueColor: AppColors.success),
-                    HighlightMetric(Strings.ManualAuditOverview.invalid, "\(model.invalidCount)", valueColor: model.invalidCount == 0 ? .primary : AppColors.error),
-                    HighlightMetric(Strings.ManualAuditOverview.remaining, "\(model.remainingCount)"),
+                    HighlightMetric(Strings.ManualAuditOverview.project, presentation.project.name),
+                    HighlightMetric(Strings.ManualAuditOverview.valid, "\(presentation.validCount)", valueColor: AppColors.success),
+                    HighlightMetric(Strings.ManualAuditOverview.invalid, "\(presentation.invalidCount)", valueColor: presentation.invalidCount == 0 ? .primary : AppColors.error),
+                    HighlightMetric(Strings.ManualAuditOverview.remaining, "\(presentation.remainingCount)"),
                     HighlightMetric(
-                        model.readyMetricTitle,
-                        model.readyMetricValue,
-                        valueColor: model.isComplete ? AppColors.success : AppColors.error
+                        presentation.readyMetricTitle,
+                        presentation.readyMetricValue,
+                        valueColor: presentation.isComplete ? AppColors.success : AppColors.error
                     )
                 ]
             )
 
-            overviewDetails(model)
+            overviewDetails(presentation)
 
-            if model.totalCount == 0 {
+            if presentation.totalCount == 0 {
                 Text(Strings.ManualAuditOverview.noReviewFramesCreated)
                     .font(Fonts.body)
                     .foregroundStyle(.secondary)
@@ -105,18 +105,18 @@ struct ManualAuditOverviewView: View {
                 alignment: .leading,
                 spacing: Spacing.large
             ) {
-                if model.isPAMGuardDetectionReview {
-                    speciesBreakdown(model.speciesRows, isExpanded: $isSpeciesExpanded)
+                if presentation.isPAMGuardDetectionReview {
+                    speciesBreakdown(presentation.speciesRows, isExpanded: $isSpeciesExpanded)
                     countBreakdown(
                         title: Strings.ManualAuditOverview.detectionsByRecording,
-                        rows: model.audioRecordingRows,
+                        rows: presentation.audioRecordingRows,
                         isExpanded: $isMediaBreakdownExpanded
                     )
-                } else if model.module.requiresSharkTrack {
-                    speciesBreakdown(model.speciesRows, isExpanded: $isSpeciesExpanded)
+                } else if presentation.module.requiresSharkTrack {
+                    speciesBreakdown(presentation.speciesRows, isExpanded: $isSpeciesExpanded)
                     countBreakdown(
                         title: Strings.ManualAuditOverview.detectionsByVideo,
-                        rows: model.mediaBreakdownRows,
+                        rows: presentation.mediaBreakdownRows,
                         isExpanded: $isMediaBreakdownExpanded
                     )
                 }
@@ -125,28 +125,28 @@ struct ManualAuditOverviewView: View {
 
             HStack {
                 Button(Strings.ManualAuditOverview.backToAudit) {
-                    appCoordinator.openManualAudit(model.project, startAtLastReviewed: true)
+                    appCoordinator.goToNextStep(for: presentation.project, startAtLastReviewed: true)
                 }
                 .buttonStyle(.secondaryAction)
 
-                Button(model.primaryActionTitle) {
-                    completePrimaryAction(model)
+                Button(presentation.primaryActionTitle) {
+                    completePrimaryAction(presentation)
                 }
                 .buttonStyle(.primaryAction)
-                .help(model.primaryActionHelp)
+                .help(presentation.primaryActionHelp)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func overviewDetails(_ model: ManualAuditOverviewModel) -> some View {
+    private func overviewDetails(_ presentation: ManualAuditOverviewPresentation) -> some View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 220), spacing: Spacing.medium, alignment: .leading)],
             alignment: .leading,
             spacing: Spacing.medium
         ) {
-            ForEach(model.detailMetrics) { metric in
+            ForEach(presentation.detailMetrics) { metric in
                 compactMetric(metric.title, metric.value)
             }
         }
@@ -157,7 +157,7 @@ struct ManualAuditOverviewView: View {
     /// Renders a grouped count card using rows already calculated by the snapshot.
     private func countBreakdown(
         title: String,
-        rows: [ManualAuditOverviewModel.CountRow],
+        rows: [ManualAuditOverviewPresentation.CountRow],
         isExpanded: Binding<Bool>
     ) -> some View {
         return expandableRowsCard(
@@ -180,7 +180,7 @@ struct ManualAuditOverviewView: View {
     }
 
     /// Renders species counts that were calculated outside the view.
-    private func speciesBreakdown(_ rows: [ManualAuditOverviewModel.SpeciesRow], isExpanded: Binding<Bool>) -> some View {
+    private func speciesBreakdown(_ rows: [ManualAuditOverviewPresentation.SpeciesRow], isExpanded: Binding<Bool>) -> some View {
         return expandableRowsCard(
             title: Strings.ManualAuditOverview.speciesCounts,
             isExpanded: isExpanded,
@@ -269,15 +269,15 @@ struct ManualAuditOverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func completePrimaryAction(_ model: ManualAuditOverviewModel) {
+    private func completePrimaryAction(_ presentation: ManualAuditOverviewPresentation) {
         do {
-            try screenModel.completePrimaryAction(
+            try viewModel.completePrimaryAction(
                 modelContext: modelContext,
-                overview: model,
+                overview: presentation,
                 coordinator: appCoordinator
             )
         } catch {
-            screenModel.load(modelContext: modelContext)
+            viewModel.load(modelContext: modelContext)
         }
     }
 }

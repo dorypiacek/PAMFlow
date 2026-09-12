@@ -119,6 +119,41 @@ enum IncludedWorkflowScreenID {
     static let projectCompletion = "project_completion"
 }
 
+enum IncludedWorkflowScreen {
+    case scanProject
+    case projectOverview
+    case sharkTrackProcessing
+    case manualAudit
+    case manualAuditOverview
+    case pamguardSetup
+    case pamguardWaiting
+    case pamguardProcessing
+    case projectCompletion
+
+    var id: String {
+        switch self {
+        case .scanProject:
+            IncludedWorkflowScreenID.scanProject
+        case .projectOverview:
+            IncludedWorkflowScreenID.projectOverview
+        case .sharkTrackProcessing:
+            IncludedWorkflowScreenID.sharkTrackProcessing
+        case .manualAudit:
+            IncludedWorkflowScreenID.manualAudit
+        case .manualAuditOverview:
+            IncludedWorkflowScreenID.manualAuditOverview
+        case .pamguardSetup:
+            IncludedWorkflowScreenID.pamguardSetup
+        case .pamguardWaiting:
+            IncludedWorkflowScreenID.pamguardWaiting
+        case .pamguardProcessing:
+            IncludedWorkflowScreenID.pamguardProcessing
+        case .projectCompletion:
+            IncludedWorkflowScreenID.projectCompletion
+        }
+    }
+}
+
 @MainActor
 protocol ProjectSetupConfigurationFactory {
     func makeConfiguration() -> ProjectSetupConfiguration
@@ -290,16 +325,59 @@ private final class IncludedWorkflowCoordinator: ModuleCoordinating {
         }
     }
 
-    func openLatestProject(_ project: Project) {
+    func previousRoute(for route: ModuleScreenRoute) -> AppRoute {
+        switch route.screenID {
+        case IncludedWorkflowScreenID.scanProject:
+            .dataTypeSelection
+        case IncludedWorkflowScreenID.projectOverview:
+            moduleRoute(.scanProject, projectID: route.projectID)
+        case IncludedWorkflowScreenID.sharkTrackProcessing:
+            moduleRoute(.projectOverview, projectID: route.projectID)
+        case IncludedWorkflowScreenID.manualAudit:
+            moduleRoute(.projectOverview, projectID: route.projectID)
+        case IncludedWorkflowScreenID.manualAuditOverview:
+            moduleRoute(.manualAudit, projectID: route.projectID, startAtLastReviewed: true)
+        case IncludedWorkflowScreenID.pamguardSetup:
+            moduleRoute(.manualAuditOverview, projectID: route.projectID)
+        case IncludedWorkflowScreenID.pamguardWaiting:
+            moduleRoute(.pamguardSetup, projectID: route.projectID)
+        case IncludedWorkflowScreenID.pamguardProcessing:
+            moduleRoute(.pamguardWaiting, projectID: route.projectID)
+        case IncludedWorkflowScreenID.projectCompletion:
+            moduleRoute(.manualAuditOverview, projectID: route.projectID)
+        default:
+            .projectSelection
+        }
+    }
+
+    func openNextStep(for project: Project, from route: AppRoute, startAtLastReviewed: Bool = false) {
+        guard case .moduleScreen(let screen) = route else {
+            openLatestProject(project, startAtLastReviewed: startAtLastReviewed)
+            return
+        }
+
+        switch screen.screenID {
+        case IncludedWorkflowScreenID.projectOverview:
+            openNextFromProjectOverview(project)
+        case IncludedWorkflowScreenID.manualAuditOverview:
+            openNextFromManualAuditOverview(project, startAtLastReviewed: startAtLastReviewed)
+        case IncludedWorkflowScreenID.pamguardWaiting:
+            open(.pamguardProcessing, for: project)
+        default:
+            openLatestProject(project, startAtLastReviewed: startAtLastReviewed)
+        }
+    }
+
+    func openLatestProject(_ project: Project, startAtLastReviewed: Bool = false) {
         switch project.workflowStatus {
         case .created, .scanInProgress:
-            appCoordinator.scanProject(project)
+            open(.scanProject, for: project)
         case .scanCompleted:
             openAfterScan(project)
         case .manualAuditInProgress:
-            appCoordinator.openManualAudit(project, startAtLastReviewed: false)
+            open(.manualAudit, for: project, startAtLastReviewed: startAtLastReviewed)
         case .manualAuditCompleted:
-            appCoordinator.openManualAuditOverview(project)
+            open(.manualAuditOverview, for: project)
         case .pamguardSetupReady:
             openAfterPAMGuardSetupReady(project)
         case .processingProjectCreated:
@@ -309,66 +387,122 @@ private final class IncludedWorkflowCoordinator: ModuleCoordinating {
         case .runOverviewCompleted:
             openAfterRunOverviewCompleted(project)
         case .detectionReviewInProgress:
-            openAfterDetectionReviewStarted(project)
+            openAfterDetectionReviewStarted(project, startAtLastReviewed: startAtLastReviewed)
         case .completed:
-            appCoordinator.openProjectCompletion(project)
+            open(.projectCompletion, for: project)
         }
     }
 
     func openReadOnlyProject(_ project: Project) {
-        appCoordinator.openNewProjectOverview(project)
+        open(.projectCompletion, for: project)
     }
 
     private func openAfterScan(_ project: Project) {
         guard module.capabilities.requiresSharkTrack else {
-            appCoordinator.openNewProjectOverview(project)
+            open(.projectOverview, for: project)
             return
         }
-        appCoordinator.openSharkTrackProcessing(project)
+        open(.sharkTrackProcessing, for: project)
     }
 
     private func openAfterPAMGuardSetupReady(_ project: Project) {
         guard module.capabilities.usesPAMGuard else {
-            appCoordinator.openManualAuditOverview(project)
+            open(.manualAuditOverview, for: project)
             return
         }
-        appCoordinator.openPAMGuardSetup(project)
+        open(.pamguardSetup, for: project)
     }
 
     private func openAfterProcessingProjectCreated(_ project: Project) {
         guard module.capabilities.requiresSharkTrack else {
-            appCoordinator.openPAMGuardWaiting(project)
+            open(.pamguardWaiting, for: project)
             return
         }
         if hasReviewItems(project) {
-            appCoordinator.openManualAudit(project, startAtLastReviewed: false)
+            open(.manualAudit, for: project)
         } else {
-            appCoordinator.openManualAuditOverview(project)
+            open(.manualAuditOverview, for: project)
         }
     }
 
     private func openAfterProcessingRunImported(_ project: Project) {
         guard module.capabilities.usesPAMGuard else {
-            appCoordinator.openNewProjectOverview(project)
+            open(.projectOverview, for: project)
             return
         }
-        appCoordinator.openManualAuditOverview(project)
+        open(.manualAuditOverview, for: project)
     }
 
     private func openAfterRunOverviewCompleted(_ project: Project) {
         guard module.capabilities.usesPAMGuard else {
-            appCoordinator.openNewProjectOverview(project)
+            open(.projectOverview, for: project)
             return
         }
-        appCoordinator.openManualAudit(project, startAtLastReviewed: false)
+        open(.manualAudit, for: project)
     }
 
-    private func openAfterDetectionReviewStarted(_ project: Project) {
+    private func openAfterDetectionReviewStarted(_ project: Project, startAtLastReviewed: Bool) {
         guard module.capabilities.usesPAMGuard else {
-            appCoordinator.openNewProjectOverview(project)
+            open(.projectOverview, for: project)
             return
         }
-        appCoordinator.openManualAudit(project, startAtLastReviewed: true)
+        open(.manualAudit, for: project, startAtLastReviewed: startAtLastReviewed)
+    }
+
+    private func openNextFromProjectOverview(_ project: Project) {
+        if module.capabilities.usesPAMGuard, project.workflowStatus == .manualAuditCompleted {
+            open(.pamguardSetup, for: project)
+            return
+        }
+
+        guard project.workflowStatus == .scanCompleted else {
+            openLatestProject(project)
+            return
+        }
+
+        guard module.capabilities.requiresSharkTrack else {
+            project.workflowStatus = .manualAuditInProgress
+            open(.manualAudit, for: project)
+            return
+        }
+
+        open(.sharkTrackProcessing, for: project)
+    }
+
+    private func openNextFromManualAuditOverview(_ project: Project, startAtLastReviewed: Bool) {
+        guard module.capabilities.usesPAMGuard, project.workflowStatus == .processingProjectCreated else {
+            openLatestProject(project, startAtLastReviewed: startAtLastReviewed)
+            return
+        }
+
+        open(.pamguardSetup, for: project)
+    }
+
+    private func open(_ screen: IncludedWorkflowScreen, for project: Project, startAtLastReviewed: Bool = false) {
+        project.lastOpenedAt = .now
+        appCoordinator.openModuleScreen(
+            ModuleScreenRoute(
+                moduleID: module.details.id,
+                screenID: screen.id,
+                projectID: project.id,
+                startAtLastReviewed: startAtLastReviewed
+            )
+        )
+    }
+
+    private func moduleRoute(
+        _ screen: IncludedWorkflowScreen,
+        projectID: UUID,
+        startAtLastReviewed: Bool = false
+    ) -> AppRoute {
+        .moduleScreen(
+            ModuleScreenRoute(
+                moduleID: module.details.id,
+                screenID: screen.id,
+                projectID: projectID,
+                startAtLastReviewed: startAtLastReviewed
+            )
+        )
     }
 
     private func hasReviewItems(_ project: Project) -> Bool {

@@ -8,14 +8,14 @@
 import SwiftData
 import SwiftUI
 
-/// Shows the scan summary before the user enters manual audit.
+/// Renders scan-summary readiness and forwards overview actions to its ViewModel.
 struct NewProjectOverviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
 
-    @State private var model: NewProjectOverviewModel
+    @State private var viewModel: NewProjectOverviewViewModel
     @State private var showsBackToSetupWarning = false
     @State private var showsBackToScanWarning = false
 
@@ -24,7 +24,7 @@ struct NewProjectOverviewView: View {
         projectScanService: ProjectScanServicing
     ) {
         self.projectID = projectID
-        _model = State(initialValue: NewProjectOverviewModel(projectScanService: projectScanService))
+        _viewModel = State(initialValue: NewProjectOverviewViewModel(projectScanService: projectScanService))
     }
 
     var body: some View {
@@ -90,13 +90,17 @@ struct NewProjectOverviewView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let project = fetchProject(),
-           let presentation = model.presentation(
+        if let project = viewModel.fetchProject(projectID, modelContext: modelContext),
+           let presentation = viewModel.presentation(
             project: project,
-            manualAuditProgress: manualAuditProgress(project: project, total: model.summary?.fileCount ?? 0)
+            manualAuditProgress: viewModel.manualAuditProgress(
+                project: project,
+                total: viewModel.summary?.fileCount ?? 0,
+                modelContext: modelContext
+            )
            ) {
             overviewContent(presentation)
-        } else if let errorMessage = model.errorMessage {
+        } else if let errorMessage = viewModel.errorMessage {
             Text(errorMessage)
                 .foregroundStyle(AppColors.error)
                 .padding(.horizontal, Spacing.large)
@@ -160,7 +164,7 @@ struct NewProjectOverviewView: View {
 
             if presentation.canSkipManualAudit {
                 Button(Strings.NewProjectOverview.skipManualAuditButton) {
-                    skipManualAudit(project: presentation.project, summary: presentation.summary)
+                    viewModel.skipManualAudit(project: presentation.project, modelContext: modelContext, coordinator: appCoordinator)
                 }
                 .buttonStyle(.secondaryAction)
                 .help(Strings.NewProjectOverview.skipManualAuditHelp)
@@ -251,56 +255,27 @@ struct NewProjectOverviewView: View {
 
 private extension NewProjectOverviewView {
     func load() {
-        guard let project = fetchProject() else { return }
-        model.load(project: project)
-        prewarmInitialAudioPreviews(project: project)
+        guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else { return }
+        viewModel.load(project: project)
+        viewModel.prewarmInitialAudioPreviews(
+            project: project,
+            audioPreviewCacheService: appCoordinator.dependencies.audioPreviewCacheService
+        )
     }
 
     @MainActor
     func performPrimaryAction(for project: Project) async {
-        model.performPrimaryAction(project: project, coordinator: appCoordinator)
-        try? modelContext.save()
-    }
-
-    func prewarmInitialAudioPreviews(project: Project) {
-        guard WorkflowModule.module(for: project.moduleID) == .pamAudio,
-              let summary = model.summary,
-              let inputFolderURL = project.inputFolderURL else {
-            return
-        }
-
-        for file in summary.files.prefix(Metrics.Cache.manualAuditPrewarmCount + 1) where isSupportedAudioPath(file.relativePath) {
-            let url = inputFolderURL.appendingPathComponent(file.relativePath)
-            appCoordinator.dependencies.audioPreviewCacheService.preheat(
-                url: url,
-                securityScopedURL: inputFolderURL,
-                clipStartSeconds: nil,
-                clipDurationSeconds: nil
-            )
-        }
-    }
-
-    func isSupportedAudioPath(_ path: String) -> Bool {
-        MediaFileExtensions.previewAudio.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
-    }
-
-    func manualAuditProgress(project: Project, total: Int) -> String {
-        guard total > 0 else {
-            return String(format: Strings.NewProjectOverview.reviewedPercentFormat, 0, 0, 0)
-        }
-
-        let reviewed = auditDecisionCount(for: project)
-        let percent = Int((Double(reviewed) / Double(total) * 100).rounded())
-        return String(format: Strings.NewProjectOverview.reviewedPercentFormat, reviewed, total, percent)
+        viewModel.performPrimaryAction(project: project, modelContext: modelContext, coordinator: appCoordinator)
     }
 
     func handleBackNavigation() {
-        guard let project = fetchProject() else {
-            model.goBack(coordinator: appCoordinator)
+        guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
+            viewModel.goBack(coordinator: appCoordinator)
             return
         }
 
-        if hasGeneratedDetections(for: project) || auditDecisionCount(for: project) > 0 {
+        if viewModel.hasGeneratedDetections(for: project) ||
+            viewModel.auditDecisionCount(for: project, modelContext: modelContext) > 0 {
             showsBackToSetupWarning = true
         } else {
             removeProjectAndReturnToSetup()
@@ -308,92 +283,20 @@ private extension NewProjectOverviewView {
     }
 
     func removeProjectAndReturnToSetup() {
-        guard let project = fetchProject() else {
-            model.openProjectSelection(coordinator: appCoordinator)
+        guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
+            viewModel.openProjectSelection(coordinator: appCoordinator)
             return
         }
 
-        do {
-            try appCoordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
-            deleteAuditDecisions(for: project)
-            modelContext.delete(project)
-            try modelContext.save()
-        } catch {
-            model.errorMessage = error.localizedDescription
-            return
-        }
-
-        model.openProjectSetup(for: project, coordinator: appCoordinator)
-    }
-
-    func hasGeneratedDetections(for project: Project) -> Bool {
-        guard let rootFolderURL = project.rootFolderURL else { return false }
-        let detectionsURL = rootFolderURL.appendingPathComponent(ProjectFileNames.detectionsDirectory, isDirectory: true)
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: detectionsURL.path, isDirectory: &isDirectory) &&
-            isDirectory.boolValue
+        viewModel.removeProjectAndReturnToSetup(project: project, modelContext: modelContext, coordinator: appCoordinator)
     }
 
     func removeAuditProgressAndGoBackToScan() {
-        guard let project = fetchProject() else {
-            model.goBack(coordinator: appCoordinator)
+        guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
+            viewModel.goBack(coordinator: appCoordinator)
             return
         }
 
-        deleteAuditDecisions(for: project)
-        project.workflowStatus = .scanCompleted
-        project.lastOpenedAt = .now
-        try? modelContext.save()
-        model.goBack(coordinator: appCoordinator)
-    }
-
-    func deleteAuditDecisions(for project: Project) {
-        let projectID = project.id
-        let descriptor = FetchDescriptor<ManualAuditDecision>(
-            predicate: #Predicate { decision in
-                decision.projectID == projectID
-            }
-        )
-        guard let decisions = try? modelContext.fetch(descriptor) else { return }
-
-        for decision in decisions {
-            modelContext.delete(decision)
-        }
-    }
-
-    func skipManualAudit(project: Project, summary: ProjectScanSummary) {
-        deleteAuditDecisions(for: project)
-        for file in summary.files {
-            modelContext.insert(
-                ManualAuditDecision(
-                    projectID: project.id,
-                    fileRelativePath: file.relativePath,
-                    decision: .valid
-                )
-            )
-        }
-        project.workflowStatus = .manualAuditCompleted
-        project.lastOpenedAt = .now
-        try? modelContext.save()
-        model.openPAMGuardSetup(for: project, coordinator: appCoordinator)
-    }
-
-    func auditDecisionCount(for project: Project) -> Int {
-        let projectID = project.id
-        let descriptor = FetchDescriptor<ManualAuditDecision>(
-            predicate: #Predicate { decision in
-                decision.projectID == projectID
-            }
-        )
-        return (try? modelContext.fetch(descriptor).count) ?? 0
-    }
-
-    func fetchProject() -> Project? {
-        let descriptor = FetchDescriptor<Project>(
-            predicate: #Predicate { project in
-                project.id == projectID
-            }
-        )
-        return try? modelContext.fetch(descriptor).first
+        viewModel.removeAuditProgressAndGoBackToScan(project: project, modelContext: modelContext, coordinator: appCoordinator)
     }
 }

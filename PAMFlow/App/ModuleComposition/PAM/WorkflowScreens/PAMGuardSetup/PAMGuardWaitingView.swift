@@ -8,14 +8,19 @@
 import SwiftData
 import SwiftUI
 
-/// Holding screen shown while the user runs the generated PAMGuard template.
+/// Renders the waiting state while the user runs the generated PAMGuard template.
 struct PAMGuardWaitingView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
 
-    @State private var showsPAMGuardHelp = false
+    @State private var viewModel: PAMGuardWaitingViewModel
+
+    init(projectID: UUID) {
+        self.projectID = projectID
+        _viewModel = State(initialValue: PAMGuardWaitingViewModel(projectID: projectID))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,18 +41,15 @@ struct PAMGuardWaitingView: View {
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: Metrics.Layout.readableTextWidth, alignment: .center)
                         
-                        if let project = fetchProject() {
+                        if let project = viewModel.fetchProject(modelContext: modelContext) {
                             HStack(spacing: Spacing.medium) {
                                 Button(Strings.PAMGuardSetup.helpButton) {
-                                    showsPAMGuardHelp = true
+                                    viewModel.showsPAMGuardHelp = true
                                 }
                                 .buttonStyle(.secondaryAction)
 
                                 Button(Strings.PAMGuardSetup.confirmRunFinished) {
-                                    project.workflowStatus = .processingRunImported
-                                    project.lastOpenedAt = .now
-                                    try? modelContext.save()
-                                    appCoordinator.openPAMGuardProcessing(project)
+                                    viewModel.confirmRunFinished(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
                                 }
                                 .buttonStyle(.primaryAction)
                             }
@@ -63,39 +65,12 @@ struct PAMGuardWaitingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
-        .sheet(isPresented: $showsPAMGuardHelp) {
+        .sheet(isPresented: $viewModel.showsPAMGuardHelp) {
             PAMGuardRunHelpView(
-                onShowPamguardFolder: pamguardFolderRevealAction()
+                onShowPamguardFolder: viewModel.pamguardFolderRevealAction(modelContext: modelContext)
             ) {
-                showsPAMGuardHelp = false
+                viewModel.showsPAMGuardHelp = false
             }
         }
-    }
-
-    private func pamguardFolderRevealAction() -> (() -> Void)? {
-        guard let project = fetchProject(),
-              let projectRootURL = project.rootFolderURL else {
-            return nil
-        }
-
-        return {
-            let accessed = projectRootURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessed {
-                    projectRootURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            FileSelectionService.revealInFinder(projectRootURL.appendingPathComponent(ProjectFileNames.pamguardDirectory))
-        }
-    }
-
-    private func fetchProject() -> Project? {
-        let descriptor = FetchDescriptor<Project>(
-            predicate: #Predicate { project in
-                project.id == projectID
-            }
-        )
-        return try? modelContext.fetch(descriptor).first
     }
 }

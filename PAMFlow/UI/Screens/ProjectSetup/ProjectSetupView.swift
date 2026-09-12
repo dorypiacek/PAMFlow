@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-/// Screen for creating a PAMFlow project from one recorder or camera data source.
+/// Renders module-configured project setup and forwards creation events to its ViewModel.
 struct ProjectSetupView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
@@ -211,15 +211,8 @@ struct ProjectSetupView: View {
     }
 
     private func createProject() {
-        guard let project = viewModel.createProject() else { return }
-
-        modelContext.insert(project)
-        do {
-            try modelContext.save()
-            appCoordinator.scanProject(project)
-        } catch {
-            viewModel.errorMessage = error.localizedDescription
-        }
+        guard let project = viewModel.createAndSaveProject(modelContext: modelContext) else { return }
+        appCoordinator.goToNextStep(for: project)
     }
 
 }

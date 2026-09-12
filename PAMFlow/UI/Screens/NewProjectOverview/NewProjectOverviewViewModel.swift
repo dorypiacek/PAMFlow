@@ -1,5 +1,5 @@
 //
-//  NewProjectOverviewModel.swift
+//  NewProjectOverviewViewModel.swift
 //  PAMFlow
 //
 //  Created by Dory on 08/06/2026.
@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import SwiftData
 import SwiftUI
 
 private enum NewProjectOverviewFormat {
@@ -60,20 +61,81 @@ struct NewProjectOverviewPresentation {
     }
 }
 
-/// Loads scan summary state for the new-project overview screen.
+/// Defines scan-summary presentation, reset actions, and workflow navigation for the project overview screen.
+@MainActor
+protocol NewProjectOverviewViewModelType: AnyObject {
+    /// Loaded scan summary for the project.
+    var summary: ProjectScanSummary? { get }
+    /// User-facing loading, reset, or workflow error.
+    var errorMessage: String? { get }
+    /// Indicates whether SharkTrack preparation is running.
+    var isPreparingSharkTrack: Bool { get }
+    /// Tracks whether SharkTrack preparation has been attempted in this view lifetime.
+    var didStartSharkTrack: Bool { get }
+    /// Successful or in-progress SharkTrack status text.
+    var sharkTrackStatusMessage: String? { get }
+    /// User-facing SharkTrack preparation failure.
+    var sharkTrackErrorMessage: String? { get }
+
+    /// Loads the project's persisted scan summary.
+    func load(project: Project)
+    /// Fetches a project by identifier from SwiftData.
+    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project?
+    /// Builds a view-ready presentation snapshot from the loaded summary.
+    func presentation(project: Project, manualAuditProgress: String) -> NewProjectOverviewPresentation?
+    /// Formats manual-audit progress using current persisted decisions.
+    func manualAuditProgress(project: Project, total: Int, modelContext: ModelContext) -> String
+    /// Counts persisted audit decisions for the project.
+    func auditDecisionCount(for project: Project, modelContext: ModelContext) -> Int
+    /// Returns whether module processing has generated a detections folder for the project.
+    func hasGeneratedDetections(for project: Project) -> Bool
+    /// Deletes the project and its generated data before returning to module setup.
+    func removeProjectAndReturnToSetup(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
+    /// Clears manual-audit progress and returns to the previous scan step.
+    func removeAuditProgressAndGoBackToScan(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
+    /// Creates valid decisions for every scanned file and advances the workflow.
+    func skipManualAudit(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
+    /// Warms initial audio previews so the first manual-audit samples open quickly.
+    func prewarmInitialAudioPreviews(project: Project, audioPreviewCacheService: AudioPreviewCacheServicing)
+    /// Marks SharkTrack preparation as started.
+    func beginSharkTrackPreparation()
+    /// Marks SharkTrack preparation as successful.
+    func finishSharkTrackPreparation()
+    /// Stores SharkTrack preparation failure text.
+    func failSharkTrackPreparation(_ error: Error)
+    /// Performs the primary overview action and advances through module workflow.
+    func performPrimaryAction(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
+    /// Delegates back navigation to the app coordinator.
+    func goBack(coordinator: AppCoordinating)
+    /// Opens the owning module's setup screen.
+    func openProjectSetup(for project: Project, coordinator: AppCoordinating)
+    /// Opens the project selection screen.
+    func openProjectSelection(coordinator: AppCoordinating)
+    /// Advances the workflow after manual audit has been skipped.
+    func continueAfterSkippingManualAudit(for project: Project, coordinator: AppCoordinating)
+}
+
+/// View model that turns scan results into project overview state and owns reset/skip actions.
 @Observable
 @MainActor
-final class NewProjectOverviewModel {
+final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
+    /// Loaded scan summary for the project.
     var summary: ProjectScanSummary?
+    /// User-facing loading, reset, or workflow error.
     var errorMessage: String?
+    /// Indicates whether SharkTrack preparation is running.
     var isPreparingSharkTrack = false
+    /// Tracks whether SharkTrack preparation has been attempted in this view lifetime.
     var didStartSharkTrack = false
+    /// Successful or in-progress SharkTrack status text.
     var sharkTrackStatusMessage: String?
+    /// User-facing SharkTrack preparation failure.
     var sharkTrackErrorMessage: String?
 
+    /// Service used to load persisted scan summaries.
     private let projectScanService: ProjectScanServicing
 
-    /// Creates a model that loads summaries and derives presentation state.
+    /// Creates a ViewModel that loads summaries and derives presentation state.
     init(projectScanService: ProjectScanServicing) {
         self.projectScanService = projectScanService
     }
@@ -86,6 +148,15 @@ final class NewProjectOverviewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { project in
+                project.id == projectID
+            }
+        )
+        return try? modelContext.fetch(descriptor).first
     }
 
     /// Builds the renderable overview state from current project, summary, and audit progress.
@@ -115,6 +186,92 @@ final class NewProjectOverviewModel {
         )
     }
 
+    func manualAuditProgress(project: Project, total: Int, modelContext: ModelContext) -> String {
+        guard total > 0 else {
+            return String(format: Strings.NewProjectOverview.reviewedPercentFormat, 0, 0, 0)
+        }
+
+        let reviewed = auditDecisionCount(for: project, modelContext: modelContext)
+        let percent = Int((Double(reviewed) / Double(total) * 100).rounded())
+        return String(format: Strings.NewProjectOverview.reviewedPercentFormat, reviewed, total, percent)
+    }
+
+    func auditDecisionCount(for project: Project, modelContext: ModelContext) -> Int {
+        let projectID = project.id
+        let descriptor = FetchDescriptor<ManualAuditDecision>(
+            predicate: #Predicate { decision in
+                decision.projectID == projectID
+            }
+        )
+        return (try? modelContext.fetch(descriptor).count) ?? 0
+    }
+
+    func hasGeneratedDetections(for project: Project) -> Bool {
+        guard let rootFolderURL = project.rootFolderURL else { return false }
+        let detectionsURL = rootFolderURL.appendingPathComponent(ProjectFileNames.detectionsDirectory, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: detectionsURL.path, isDirectory: &isDirectory) &&
+            isDirectory.boolValue
+    }
+
+    func removeProjectAndReturnToSetup(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+        do {
+            try coordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
+            deleteAuditDecisions(for: project, modelContext: modelContext)
+            modelContext.delete(project)
+            try modelContext.save()
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        openProjectSetup(for: project, coordinator: coordinator)
+    }
+
+    func removeAuditProgressAndGoBackToScan(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+        deleteAuditDecisions(for: project, modelContext: modelContext)
+        project.workflowStatus = .scanCompleted
+        project.lastOpenedAt = .now
+        try? modelContext.save()
+        goBack(coordinator: coordinator)
+    }
+
+    func skipManualAudit(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+        guard let summary else { return }
+        deleteAuditDecisions(for: project, modelContext: modelContext)
+        for file in summary.files {
+            modelContext.insert(
+                ManualAuditDecision(
+                    projectID: project.id,
+                    fileRelativePath: file.relativePath,
+                    decision: .valid
+                )
+            )
+        }
+        project.workflowStatus = .manualAuditCompleted
+        project.lastOpenedAt = .now
+        try? modelContext.save()
+        continueAfterSkippingManualAudit(for: project, coordinator: coordinator)
+    }
+
+    func prewarmInitialAudioPreviews(project: Project, audioPreviewCacheService: AudioPreviewCacheServicing) {
+        guard WorkflowModule.module(for: project.moduleID) == .pamAudio,
+              let summary,
+              let inputFolderURL = project.inputFolderURL else {
+            return
+        }
+
+        for file in summary.files.prefix(Metrics.Cache.manualAuditPrewarmCount + 1) where isSupportedAudioPath(file.relativePath) {
+            let url = inputFolderURL.appendingPathComponent(file.relativePath)
+            audioPreviewCacheService.preheat(
+                url: url,
+                securityScopedURL: inputFolderURL,
+                clipStartSeconds: nil,
+                clipDurationSeconds: nil
+            )
+        }
+    }
+
     /// Marks SharkTrack preparation as started.
     func beginSharkTrackPreparation() {
         didStartSharkTrack = true
@@ -138,21 +295,10 @@ final class NewProjectOverviewModel {
     }
 
     /// Performs the primary action's model decision and delegates navigation to the coordinator.
-    func performPrimaryAction(project: Project, coordinator: AppCoordinating) {
+    func performPrimaryAction(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
         project.lastOpenedAt = .now
-        let module = WorkflowModule.module(for: project.moduleID)
-        if module.requiresSharkTrack, project.workflowStatus == .scanCompleted {
-            coordinator.openSharkTrackProcessing(project)
-            return
-        }
-
-        if project.workflowStatus == .manualAuditCompleted {
-            coordinator.openManualAuditOverview(project)
-            return
-        }
-
-        project.workflowStatus = .manualAuditInProgress
-        coordinator.openManualAudit(project, startAtLastReviewed: false)
+        try? modelContext.save()
+        coordinator.goToNextStep(for: project)
     }
 
     /// Delegates back navigation when there is no destructive confirmation to show.
@@ -170,9 +316,9 @@ final class NewProjectOverviewModel {
         coordinator.openProjectSelection()
     }
 
-    /// Delegates navigation to PAMGuard setup after a skipped audio audit.
-    func openPAMGuardSetup(for project: Project, coordinator: AppCoordinating) {
-        coordinator.openPAMGuardSetup(project)
+    /// Delegates navigation after skipping manual audit.
+    func continueAfterSkippingManualAudit(for project: Project, coordinator: AppCoordinating) {
+        coordinator.goToNextStep(for: project)
     }
 
     private func highlightMetrics(
@@ -216,6 +362,24 @@ final class NewProjectOverviewModel {
             valueColor: summary.fileCount > 0 ? readiness.color : AppColors.error
         ))
         return metrics
+    }
+
+    private func deleteAuditDecisions(for project: Project, modelContext: ModelContext) {
+        let projectID = project.id
+        let descriptor = FetchDescriptor<ManualAuditDecision>(
+            predicate: #Predicate { decision in
+                decision.projectID == projectID
+            }
+        )
+        guard let decisions = try? modelContext.fetch(descriptor) else { return }
+
+        for decision in decisions {
+            modelContext.delete(decision)
+        }
+    }
+
+    private func isSupportedAudioPath(_ path: String) -> Bool {
+        MediaFileExtensions.previewAudio.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
     }
 
     private func detailMetrics(

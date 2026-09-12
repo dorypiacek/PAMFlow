@@ -8,51 +8,88 @@
 import Foundation
 import Observation
 import AppKit
+import SwiftData
 import UniformTypeIdentifiers
 
-/// State and actions for creating a PAMFlow project for a selected data module.
+/// Defines state and actions for creating a project for a selected data module.
 @MainActor
 protocol ProjectSetupViewModelType: AnyObject {
+    /// Module-specific setup rules, metadata fields, and project naming.
     var configuration: ProjectSetupConfiguration { get }
+    /// Selected raw input folder or file set.
     var selectedInputSource: ProjectInputSourceSelection? { get }
+    /// User-entered project display name.
     var projectName: String { get set }
+    /// Current metadata values keyed by module-defined field identifiers.
     var metadataValues: ProjectMetadataValues { get set }
+    /// Name of the uploaded metadata CSV, when one is loaded.
     var metadataFileName: String? { get }
+    /// Identifier of the selected metadata row.
     var selectedMetadataRowID: String { get set }
+    /// Row identifiers available from the uploaded metadata table.
     var metadataSelectionOptions: [String] { get }
+    /// Most recently created project, used for success feedback.
     var createdProject: Project? { get }
+    /// User-facing setup or persistence error.
     var errorMessage: String? { get set }
+    /// Indicates whether all required inputs are present and valid.
     var canCreateProject: Bool { get }
+    /// Guidance text describing the current input-source selection.
     var inputSelectionGuidance: String { get }
+    /// Title for the metadata row picker.
     var metadataSelectionTitle: String { get }
+    /// Indicates whether an uploaded metadata table can be selected from.
     var showsMetadataSelection: Bool { get }
 
+    /// Returns a metadata value for display or editing.
     func metadataValue(for fieldID: String) -> String
+    /// Updates one metadata value.
     func setMetadataValue(_ value: String, for fieldID: String)
+    /// Opens the input-source picker and stores the selected source.
     func selectInputSource()
+    /// Restores the last uploaded metadata table when security-scoped access is still available.
     func loadCachedMetadataTable()
+    /// Prompts for a metadata CSV and loads selectable rows from it.
     func uploadMetadataTable()
+    /// Copies values from the selected metadata row into current setup metadata.
     func applySelectedMetadataRow()
+    /// Creates the project folder structure and returns an unsaved project model.
     func createProject() -> Project?
+    /// Creates and persists a project in SwiftData.
+    func createAndSaveProject(modelContext: ModelContext) -> Project?
 }
 
+/// Base ViewModel for module-configurable project setup.
 @Observable
 @MainActor
 class BaseProjectSetupViewModel: ProjectSetupViewModelType {
+    /// Module-specific setup rules, metadata fields, and project naming.
     let configuration: ProjectSetupConfiguration
 
+    /// Selected raw input folder or file set.
     var selectedInputSource: ProjectInputSourceSelection?
+    /// Selected recorder identifier retained for compatibility with existing metadata flows.
     var selectedRecorderID: String?
+    /// User-entered project display name.
     var projectName = ""
+    /// Current metadata values keyed by module-defined field identifiers.
     var metadataValues = ProjectMetadataValues()
+    /// Name of the uploaded metadata CSV, when one is loaded.
     var metadataFileName: String?
+    /// Identifier of the selected metadata row.
     var selectedMetadataRowID = ""
+    /// Row identifiers available from the uploaded metadata table.
     var metadataSelectionOptions: [String] = []
+    /// Most recently created project, used for success feedback.
     var createdProject: Project?
+    /// User-facing setup or persistence error.
     var errorMessage: String?
 
+    /// Parsed metadata table loaded from the most recent CSV upload.
     private var metadataTable: ProjectMetadataTable?
+    /// Service that creates project folders and suggests names.
     private let projectFileService: ProjectFileServicing
+    /// Service that presents input and destination selection UI.
     private let fileSelectionService: FileSelecting
 
     init(
@@ -205,6 +242,19 @@ class BaseProjectSetupViewModel: ProjectSetupViewModelType {
                 moduleID: configuration.module.id.rawValue,
                 originalError: error
             )
+        }
+    }
+
+    func createAndSaveProject(modelContext: ModelContext) -> Project? {
+        guard let project = createProject() else { return nil }
+
+        modelContext.insert(project)
+        do {
+            try modelContext.save()
+            return project
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 

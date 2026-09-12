@@ -34,6 +34,18 @@ protocol ModuleCoordinating: AnyObject {
 
     func startProject() -> AnyView
     func makeScreen(for route: ModuleScreenRoute) -> AnyView
-    func openLatestProject(_ project: Project)
+    func previousRoute(for route: ModuleScreenRoute) -> AppRoute
+    func openNextStep(for project: Project, from route: AppRoute, startAtLastReviewed: Bool)
+    func openLatestProject(_ project: Project, startAtLastReviewed: Bool)
     func openReadOnlyProject(_ project: Project)
+}
+
+extension ModuleCoordinating {
+    func openNextStep(for project: Project, from route: AppRoute, startAtLastReviewed: Bool = false) {
+        openLatestProject(project, startAtLastReviewed: startAtLastReviewed)
+    }
+
+    func openLatestProject(_ project: Project) {
+        openLatestProject(project, startAtLastReviewed: false)
+    }
 }

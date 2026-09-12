@@ -1,82 +1,78 @@
 //
-//  SharkTrackProcessingView.swift
+//  SharkTrackProcessingViewModel.swift
 //  PAMFlow
 //
-//  Created by Dory on 19/06/2026.
+//  Created by Dory on 12/09/2026.
 //
 
+import Foundation
+import Observation
 import SwiftData
-import SwiftUI
 
-/// Runs SharkTrack processing before BRUV/RUV manual review.
-///
-/// This screen intentionally mirrors the scan progress screen so processing is
-/// presented as a durable workflow step instead of a side effect of the project
-/// overview.
-struct SharkTrackProcessingView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+/// Defines state and commands for the BRUV/RUV SharkTrack processing step.
+@MainActor
+protocol SharkTrackProcessingViewModelType: AnyObject {
+    /// User-facing processing failure, if the SharkTrack run cannot complete.
+    var errorMessage: String? { get }
+    /// Indicates whether SharkTrack processing is currently active.
+    var isProcessing: Bool { get }
+    /// Primary status text displayed in the progress surface.
+    var statusMessage: String { get }
+    /// Secondary detail text such as estimated remaining time.
+    var detailMessage: String? { get }
+    /// Normalized processing progress from `0...1`.
+    var progress: Double { get }
 
-    let projectID: UUID
+    /// Runs SharkTrack preparation for the project and advances the workflow when finished.
+    func processProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async
+    /// Keeps progress moving during SharkTrack runtime phases that do not emit frame callbacks.
+    func runProgressHeartbeat() async
+}
 
-    @State private var errorMessage: String?
-    @State private var isProcessing = false
-    @State private var statusMessage = Strings.SharkTrackProcessing.preparingMessage
-    @State private var currentFileMessage: String?
-    @State private var detailMessage: String?
-    @State private var processingStartedAt: Date?
-    @State private var lastRuntimeProgressAt: Date?
-    @State private var hasRuntimeFrameProgress = false
-    @State private var batchStartedAt: Date?
-    @State private var currentFileIndex = 1
-    @State private var totalFileCount = 1
-    @State private var progress = 0.0
+/// View model for the module-owned SharkTrack processing workflow step.
+@Observable
+@MainActor
+final class SharkTrackProcessingViewModel: SharkTrackProcessingViewModelType {
+    /// User-facing processing failure, if the SharkTrack run cannot complete.
+    var errorMessage: String?
+    /// Indicates whether SharkTrack processing is currently active.
+    var isProcessing = false
+    /// Primary status text displayed in the progress surface.
+    var statusMessage = Strings.SharkTrackProcessing.preparingMessage
+    /// Last file-level message emitted by the SharkTrack service.
+    var currentFileMessage: String?
+    /// Secondary detail text such as estimated remaining time.
+    var detailMessage: String?
+    /// Start time for the current runtime phase.
+    var processingStartedAt: Date?
+    /// Last time the external runtime emitted granular progress.
+    var lastRuntimeProgressAt: Date?
+    /// Indicates whether frame-level progress has been received for the current file.
+    var hasRuntimeFrameProgress = false
+    /// Start time for the current batch.
+    var batchStartedAt: Date?
+    /// One-based index of the file currently being processed.
+    var currentFileIndex = 1
+    /// Number of files in the current processing batch.
+    var totalFileCount = 1
+    /// Normalized processing progress from `0...1`.
+    var progress = 0.0
 
-    var body: some View {
-        VStack(spacing: 0) {
-            TopBarView()
+    /// Identifier of the project being processed.
+    private let projectID: UUID
 
-            GeometryReader { proxy in
-                ScrollView {
-                    LoadingCardView(
-                        title: Strings.SharkTrackProcessing.title,
-                        subtitle: Strings.SharkTrackProcessing.subtitle,
-                        message: statusMessage,
-                        progress: progress,
-                        detail: detailMessage,
-                        errorMessage: errorMessage
-                    ) {
-                        if errorMessage != nil {
-                            Button(Strings.SharkTrackProcessing.retryButton) {
-                                Task {
-                                    await processProject()
-                                }
-                            }
-                            .buttonStyle(.primaryAction)
-                        }
-                    }
-                    .padding(Spacing.large)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .center)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.background)
-        .task {
-            await processProject()
-        }
-        .task(id: isProcessing) {
-            guard isProcessing else { return }
-            await runProgressHeartbeat()
-        }
+    /// Creates processing state for a persisted BRUV/RUV project.
+    init(projectID: UUID) {
+        self.projectID = projectID
     }
 
-    private func processProject() async {
-        guard !isProcessing, let project = fetchProject() else { return }
+    /// Prepares the initial audit batch, stores the updated scan summary, and opens the next module step.
+    func processProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async {
+        guard !isProcessing, let project = fetchProject(modelContext: modelContext) else { return }
 
         let module = WorkflowModule.module(for: project.moduleID)
         guard module.requiresSharkTrack else {
-            appCoordinator.openManualAudit(project)
+            appCoordinator.goToNextStep(for: project)
             return
         }
 
@@ -94,7 +90,7 @@ struct SharkTrackProcessingView: View {
         do {
             try await appCoordinator.dependencies.sharkTrackService.prepareInitialAuditBatch(for: project) { update in
                 Task { @MainActor in
-                    apply(update)
+                    self.apply(update)
                 }
             }
 
@@ -105,12 +101,10 @@ struct SharkTrackProcessingView: View {
             try project.storeScanSummary(summary)
             try modelContext.save()
 
-            if summary.fileCount > 0 {
-                appCoordinator.openManualAudit(project)
-            } else {
+            if summary.fileCount == 0 {
                 AppLog.sharkTrack("No SharkTrack review detections found; opening overview without error")
-                appCoordinator.openManualAuditOverview(project)
             }
+            appCoordinator.goToNextStep(for: project)
         } catch {
             AppLog.sharkTrack("Processing screen failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -118,6 +112,14 @@ struct SharkTrackProcessingView: View {
         }
 
         isProcessing = false
+    }
+
+    /// Updates elapsed-time messaging while the external runtime is busy without granular callbacks.
+    func runProgressHeartbeat() async {
+        while isProcessing {
+            refreshSilentRuntimeStatus()
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 
     private func apply(_ update: SharkTrackPreparationProgress) {
@@ -176,14 +178,6 @@ struct SharkTrackProcessingView: View {
         }
     }
 
-    @MainActor
-    private func runProgressHeartbeat() async {
-        while isProcessing {
-            refreshSilentRuntimeStatus()
-            try? await Task.sleep(for: .seconds(1))
-        }
-    }
-
     private func refreshSilentRuntimeStatus() {
         guard errorMessage == nil,
               currentFileMessage != nil,
@@ -213,7 +207,7 @@ struct SharkTrackProcessingView: View {
         return String(format: Strings.SharkTrackProcessing.remainingFormat, formatDuration(remaining))
     }
 
-    private func fetchProject() -> Project? {
+    private func fetchProject(modelContext: ModelContext) -> Project? {
         let descriptor = FetchDescriptor<Project>(
             predicate: #Predicate { project in
                 project.id == projectID

@@ -11,7 +11,7 @@ import Foundation
 ///
 /// `ManualAuditOverviewView` should render this as a snapshot rather than recalculate
 /// audit counts, species summaries, and media grouping directly in SwiftUI.
-struct ManualAuditOverviewModel {
+struct ManualAuditOverviewPresentation {
     /// One grouped breakdown row shown in expandable overview cards.
     struct CountRow: Identifiable, Equatable {
         let name: String

@@ -9,7 +9,7 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// Manual sample-by-sample review screen.
+/// Renders manual review controls while `ManualAuditViewModel` owns queue state and decisions.
 struct ManualAuditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
@@ -17,7 +17,7 @@ struct ManualAuditView: View {
     let projectID: UUID
     let startAtLastReviewed: Bool
     
-    @State private var model: ManualAuditModel
+    @State private var viewModel: ManualAuditViewModel
     @StateObject private var playbackService = AudioPlaybackService()
     @State private var decisionVersion = 0
     @State private var isShowingSpeciesSelection = false
@@ -34,7 +34,7 @@ struct ManualAuditView: View {
     ) {
         self.projectID = projectID
         self.startAtLastReviewed = startAtLastReviewed
-        _model = State(initialValue: ManualAuditModel(
+        _viewModel = State(initialValue: ManualAuditViewModel(
             projectScanService: projectScanService,
             audioPreviewCacheService: audioPreviewCacheService
         ))
@@ -45,7 +45,7 @@ struct ManualAuditView: View {
             TopBarView()
 
             Group {
-                if let project = fetchProject() {
+                if let project = viewModel.fetchProject(projectID, modelContext: modelContext) {
                     auditContent(project: project)
                 } else {
                     Text(Strings.Common.projectNotFound)
@@ -60,8 +60,8 @@ struct ManualAuditView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
         .task {
-            if let project = fetchProject() {
-                model.load(
+            if let project = viewModel.fetchProject(projectID, modelContext: modelContext) {
+                viewModel.load(
                     project: project,
                     modelContext: modelContext,
                     startAtLastReviewed: startAtLastReviewed
@@ -70,10 +70,10 @@ struct ManualAuditView: View {
         }
         .onDisappear {
             playbackService.stop()
-            model.cancelPreviewWork()
+            viewModel.cancelPreviewWork()
         }
         .sheet(isPresented: $isShowingSpeciesSelection) {
-            if let project = fetchProject(), let file = model.selectedFile {
+            if let project = viewModel.fetchProject(projectID, modelContext: modelContext), let file = viewModel.selectedFile {
                 SpeciesSelectionSheet(
                     taxa: SpeciesCatalog.taxa(for: project.moduleID),
                     drafts: speciesAssignmentDrafts(for: file, project: project),
@@ -87,9 +87,9 @@ struct ManualAuditView: View {
             }
         }
         .sheet(isPresented: $isShowingReasonSelection) {
-            if let project = fetchProject() {
+            if let project = viewModel.fetchProject(projectID, modelContext: modelContext) {
                 AuditReasonSelectionSheet(
-                    configuration: reasonConfiguration(for: project),
+                    configuration: viewModel.reasonConfiguration(for: project),
                     currentReason: invalidReason,
                     onSave: { reason in
                         setInvalidReason(reason, project: project)
@@ -106,10 +106,10 @@ struct ManualAuditView: View {
         VStack(alignment: .leading, spacing: Spacing.large) {
             header(project: project)
             
-            if let errorMessage = model.errorMessage, model.selectedFile == nil {
+            if let errorMessage = viewModel.errorMessage, viewModel.selectedFile == nil {
                 Text(errorMessage)
                     .foregroundStyle(AppColors.error)
-            } else if let file = model.selectedFile {
+            } else if let file = viewModel.selectedFile {
                 VStack(alignment: .leading, spacing: Spacing.large) {
                     HStack(alignment: .top, spacing: Spacing.large) {
                         previewPanel(file: file, project: project)
@@ -157,7 +157,7 @@ struct ManualAuditView: View {
                 Text(reviewTitle(for: project))
                     .font(Fonts.screenTitle)
                 
-                Text(model.reviewHeaderText(
+                Text(viewModel.reviewHeaderText(
                     projectName: project.name,
                     module: WorkflowModule.module(for: project.moduleID)
                 ))
@@ -174,7 +174,7 @@ struct ManualAuditView: View {
         return VStack(alignment: .leading, spacing: Spacing.medium) {
             if module.requiresSharkTrack {
                 sharkTrackPreview(file: file, project: project)
-            } else if model.isLoadingPreview {
+            } else if viewModel.isLoadingPreview {
                 VStack(spacing: Spacing.small) {
                     ProgressView()
                     Text(Strings.ManualAudit.loadingPreview)
@@ -182,10 +182,10 @@ struct ManualAuditView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            } else if let preview = model.preview {
+            } else if let preview = viewModel.preview {
                 previewImages(preview)
             } else {
-                Text(model.errorMessage ?? Strings.ManualAudit.previewUnavailable)
+                Text(viewModel.errorMessage ?? Strings.ManualAudit.previewUnavailable)
                     .foregroundStyle(AppColors.error)
                     .frame(maxHeight: .infinity, alignment: .center)
             }
@@ -199,7 +199,7 @@ struct ManualAuditView: View {
 
     private func sharkTrackPreview(file: ProjectScanFile, project: Project) -> some View {
         Group {
-            if let image = sharkTrackImage(file: file, project: project) {
+            if let image = viewModel.sharkTrackImage(file: file, project: project) {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
@@ -269,7 +269,7 @@ struct ManualAuditView: View {
                 }
                 .help(playbackService.isPlaying ? Strings.ManualAudit.pauseHelp : Strings.ManualAudit.playHelp)
                 .buttonStyle(.plain)
-                .disabled(model.audioURL(project: project, file: file) == nil)
+                .disabled(viewModel.audioURL(project: project, file: file) == nil)
                 .frame(width: buttonSize, height: rowHeight, alignment: .center)
                 
                 TimelineView(.animation) { timeline in
@@ -318,7 +318,7 @@ struct ManualAuditView: View {
             
             metric(Strings.ManualAudit.fileName, displaySourceName(for: file, module: module))
             metric(Strings.ManualAudit.decision, currentDecision?.title ?? Strings.ManualAudit.notReviewed)
-            if !model.isPAMGuardDetectionReview(project: project) {
+            if !viewModel.isPAMGuardDetectionReview(project: project) {
                 metric(
                     Strings.ManualAudit.quality,
                     file.qualityFlag,
@@ -328,7 +328,7 @@ struct ManualAuditView: View {
 
         if module.requiresSharkTrack {
             sharkTrackEvidence(file, module: module)
-        } else if model.isPAMGuardDetectionReview(project: project) {
+        } else if viewModel.isPAMGuardDetectionReview(project: project) {
             pamguardDetectionEvidence(file)
         } else {
             audioEvidence(file)
@@ -386,12 +386,12 @@ struct ManualAuditView: View {
     
     private func decisionControls(project: Project) -> some View {
         let selectedDecision: ManualAuditDecisionValue?
-        if let selectedFile = model.selectedFile {
+        if let selectedFile = viewModel.selectedFile {
             selectedDecision = currentDecision(for: selectedFile, project: project)
         } else {
             selectedDecision = nil
         }
-        let requiresInvalidReason = reasonConfiguration(for: project).isRequired && selectedDecision == .invalid
+        let requiresInvalidReason = viewModel.reasonConfiguration(for: project).isRequired && selectedDecision == .invalid
         let canNavigate = selectedDecision != nil && (!requiresInvalidReason || !invalidReason.isEmpty)
         let module = WorkflowModule.module(for: project.moduleID)
         return HStack(spacing: Spacing.large) {
@@ -406,7 +406,7 @@ struct ManualAuditView: View {
             .help(Strings.ManualAudit.previousSampleHelp)
             .buttonStyle(.prominentSecondaryAction)
             .controlSize(.regular)
-            .disabled(!model.canMovePrevious)
+            .disabled(!viewModel.canMovePrevious)
 
             Spacer()
 
@@ -432,7 +432,7 @@ struct ManualAuditView: View {
 
             Spacer()
 
-            if model.canMoveNextByIndex {
+            if viewModel.canMoveNextByIndex {
                 Button {
                     moveNext(project: project)
                 } label: {
@@ -463,7 +463,9 @@ struct ManualAuditView: View {
     }
 
     private func decisionOptions(for module: WorkflowModule) -> [ManualAuditDecisionValue] {
-        if module == .pamAudio, let project = fetchProject(), model.isPAMGuardDetectionReview(project: project) {
+        if module == .pamAudio,
+           let project = viewModel.fetchProject(projectID, modelContext: modelContext),
+           viewModel.isPAMGuardDetectionReview(project: project) {
             return [.valid, .unsure, .invalid]
         }
         return module == .pamAudio ? [.valid, .unsure, .invalid] : [.valid, .invalid]
@@ -487,8 +489,8 @@ struct ManualAuditView: View {
     }
 
     private func assignSpeciesButton(project: Project, canEdit: Bool) -> some View {
-        let selections = model.selectedFile.map {
-            model.speciesSelections(for: $0, project: project, modelContext: modelContext)
+        let selections = viewModel.selectedFile.map {
+            viewModel.speciesSelections(for: $0, project: project, modelContext: modelContext)
         } ?? []
         let title = speciesAssignmentTitle(for: selections)
 
@@ -673,12 +675,12 @@ struct ManualAuditView: View {
             try playbackService.togglePlayback(
                 url: url,
                 securityScopedURL: inputFolderURL,
-                clipStartSeconds: model.clipStartSeconds(project: project, file: file),
-                clipDurationSeconds: model.clipDurationSeconds(project: project, file: file)
+                clipStartSeconds: viewModel.clipStartSeconds(project: project, file: file),
+                clipDurationSeconds: viewModel.clipDurationSeconds(project: project, file: file)
             )
-            model.errorMessage = nil
+            viewModel.errorMessage = nil
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
     
@@ -692,58 +694,37 @@ struct ManualAuditView: View {
         playbackService.prepareIfNeeded(
             url: inputFolderURL.appendingPathComponent(file.sourceVideo ?? file.relativePath),
             securityScopedURL: inputFolderURL,
-            clipStartSeconds: model.clipStartSeconds(project: project, file: file),
-            clipDurationSeconds: model.clipDurationSeconds(project: project, file: file)
+            clipStartSeconds: viewModel.clipStartSeconds(project: project, file: file),
+            clipDurationSeconds: viewModel.clipDurationSeconds(project: project, file: file)
         )
     }
     
     private func save(_ decision: ManualAuditDecisionValue, project: Project) {
-        guard let file = model.selectedFile else { return }
+        guard let file = viewModel.selectedFile else { return }
         pendingDecisions[file.relativePath] = decision
         decisionVersion += 1
 
         do {
-            try model.saveDecision(decision, project: project, modelContext: modelContext)
+            try viewModel.saveDecision(decision, project: project, modelContext: modelContext)
             saveMaxNOverride()
             if decision == .invalid || decision == .unsure {
-                saveInvalidReason(project: project)
+                viewModel.saveInvalidReason(invalidReason, project: project, modelContext: modelContext)
             } else {
                 invalidReason = ""
-                saveInvalidReason(project: project)
+                viewModel.saveInvalidReason(invalidReason, project: project, modelContext: modelContext)
             }
             decisionVersion += 1
         } catch {
             pendingDecisions[file.relativePath] = nil
             decisionVersion += 1
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
-    }
-
-    private func saveInvalidReason(project: Project) {
-        guard let file = model.selectedFile,
-              let auditDecision = model.auditDecision(for: file, project: project, modelContext: modelContext) else {
-            return
-        }
-        auditDecision.notes = invalidReason
-        auditDecision.updatedAt = .now
-        try? modelContext.save()
     }
 
     private func setInvalidReason(_ reason: String, project: Project) {
         invalidReason = reason
-        saveInvalidReason(project: project)
+        viewModel.saveInvalidReason(reason, project: project, modelContext: modelContext)
         decisionVersion += 1
-    }
-
-    private func reasonConfiguration(for project: Project) -> AuditReasonConfiguration {
-        let module = WorkflowModule.module(for: project.moduleID)
-        if module == .pamAudio {
-            return model.isPAMGuardDetectionReview(project: project)
-                ? .pamDetectionReview()
-                : .manualAudit()
-        }
-
-        return .freeTextOptional()
     }
 
     private func shouldShowReviewAction(for module: WorkflowModule, project: Project) -> Bool {
@@ -772,36 +753,36 @@ struct ManualAuditView: View {
     }
 
     private func syncInvalidReason(file: ProjectScanFile, project: Project) {
-        invalidReason = model.auditDecision(for: file, project: project, modelContext: modelContext)?.notes ?? ""
+        invalidReason = viewModel.auditDecision(for: file, project: project, modelContext: modelContext)?.notes ?? ""
     }
 
     private func syncMaxN(file: ProjectScanFile, project: Project) {
-        maxNText = model.effectiveMaxN(for: file, project: project, modelContext: modelContext).map(String.init) ?? ""
+        maxNText = viewModel.effectiveMaxN(for: file, project: project, modelContext: modelContext).map(String.init) ?? ""
     }
 
     private func adjustMaxN(by delta: Int) {
-        let currentValue = Int(maxNText) ?? model.selectedFile?.maxN ?? 1
+        let currentValue = Int(maxNText) ?? viewModel.selectedFile?.maxN ?? 1
         maxNText = "\(max(1, currentValue + delta))"
         saveMaxNOverride()
     }
 
     private func saveMaxNOverride() {
-        guard let project = fetchProject(),
+        guard let project = viewModel.fetchProject(projectID, modelContext: modelContext),
               WorkflowModule.module(for: project.moduleID).requiresSharkTrack else { return }
         let trimmed = maxNText.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed.isEmpty ? nil : max(1, Int(trimmed) ?? 1)
         maxNText = value.map(String.init) ?? ""
         do {
-            try model.saveMaxNOverride(value, project: project, modelContext: modelContext)
+            try viewModel.saveMaxNOverride(value, project: project, modelContext: modelContext)
             decisionVersion += 1
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 
     private func saveSpeciesSelection(_ selection: SpeciesSelection, replacingID selectionID: String?, project: Project) {
         do {
-            try model.saveSpeciesSelection(
+            try viewModel.saveSpeciesSelection(
                 selection,
                 replacingID: selectionID,
                 project: project,
@@ -809,23 +790,23 @@ struct ManualAuditView: View {
             )
             decisionVersion += 1
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 
     private func deleteSpeciesSelection(_ selection: SpeciesSelection, project: Project) {
         do {
-            try model.deleteSpeciesSelection(selection, project: project, modelContext: modelContext)
+            try viewModel.deleteSpeciesSelection(selection, project: project, modelContext: modelContext)
             decisionVersion += 1
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 
     private func saveSpeciesDrafts(_ drafts: [SpeciesAssignmentDraft], project: Project) {
         do {
             for draft in drafts {
-                try model.saveSpeciesAssignment(
+                try viewModel.saveSpeciesAssignment(
                     draft,
                     project: project,
                     modelContext: modelContext
@@ -833,7 +814,7 @@ struct ManualAuditView: View {
             }
             decisionVersion += 1
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 
@@ -841,17 +822,17 @@ struct ManualAuditView: View {
         for selectedFile: ProjectScanFile,
         project: Project
     ) -> [SpeciesAssignmentDraft] {
-        model.detectionsInCurrentFrame(for: selectedFile).map { file in
+        viewModel.detectionsInCurrentFrame(for: selectedFile).map { file in
             SpeciesAssignmentDraft(
                 id: file.relativePath,
                 trackID: file.trackID,
                 confidence: file.sharkTrackConfidence,
-                selection: model.speciesSelections(
+                selection: viewModel.speciesSelections(
                     for: file,
                     project: project,
                     modelContext: modelContext
                 ).first,
-                isRemoved: model.isRemovedFromExport(
+                isRemoved: viewModel.isRemovedFromExport(
                     for: file,
                     project: project,
                     modelContext: modelContext
@@ -862,10 +843,10 @@ struct ManualAuditView: View {
 
     private func setDetectionRemoved(_ isRemoved: Bool, project: Project) {
         do {
-            try model.setRemovedFromExport(isRemoved, project: project, modelContext: modelContext)
+            try viewModel.setRemovedFromExport(isRemoved, project: project, modelContext: modelContext)
             decisionVersion += 1
         } catch {
-            model.errorMessage = error.localizedDescription
+            viewModel.errorMessage = error.localizedDescription
         }
     }
     
@@ -873,7 +854,7 @@ struct ManualAuditView: View {
         playbackService.stop()
         saveMaxNOverride()
         withAnimation(.easeInOut(duration: 0.2)) {
-            model.movePrevious(project: project)
+            viewModel.movePrevious(project: project)
         }
     }
     
@@ -881,17 +862,17 @@ struct ManualAuditView: View {
         playbackService.stop()
         saveMaxNOverride()
         withAnimation(.easeInOut(duration: 0.2)) {
-            model.moveNext(project: project)
+            viewModel.moveNext(project: project)
         }
     }
 
     private func finishAudit(project: Project) {
         playbackService.stop()
-        appCoordinator.openManualAuditOverview(project)
+        appCoordinator.goToNextStep(for: project)
     }
 
     private func currentDecision(for file: ProjectScanFile, project: Project) -> ManualAuditDecisionValue? {
-        pendingDecisions[file.relativePath] ?? model.decision(
+        pendingDecisions[file.relativePath] ?? viewModel.decision(
             for: file,
             project: project,
             modelContext: modelContext,
@@ -900,42 +881,13 @@ struct ManualAuditView: View {
     }
 
     private func reviewTitle(for project: Project) -> String {
-        model.isPAMGuardDetectionReview(project: project)
+        viewModel.isPAMGuardDetectionReview(project: project)
             ? Strings.ManualAudit.detectionReviewTitle
             : WorkflowModule.module(for: project.moduleID).requiresSharkTrack
             ? Strings.ManualAudit.frameReviewTitle
             : Strings.ManualAudit.title
     }
 
-    private func sharkTrackPreviewURL(file: ProjectScanFile, project: Project) -> URL? {
-        let relativePath = file.sharkTrackPreviewPath ?? file.relativePath
-        if model.isPAMGuardDetectionReview(project: project) {
-            return project.rootFolderURL?.appendingPathComponent(relativePath)
-        }
-        if let rootURL = project.rootFolderURL?.appendingPathComponent(relativePath),
-           FileManager.default.fileExists(atPath: rootURL.path) {
-            return rootURL
-        }
-        return project.inputFolderURL?.appendingPathComponent(relativePath)
-    }
-
-    private func sharkTrackImage(file: ProjectScanFile, project: Project) -> NSImage? {
-        guard let previewURL = sharkTrackPreviewURL(file: file, project: project) else {
-            return nil
-        }
-
-        let scopedURL = previewURL.path.hasPrefix(project.rootFolderURL?.path ?? "")
-            ? project.rootFolderURL
-            : project.inputFolderURL
-        let accessed = scopedURL?.startAccessingSecurityScopedResource() ?? false
-        defer {
-            if accessed {
-                scopedURL?.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        return NSImage(contentsOf: previewURL)
-    }
     
     private func formatDuration(_ seconds: Double) -> String {
         seconds >= 60 ? "\(Int(seconds.rounded())) seconds" : String(format: "%.1f seconds", seconds)
@@ -957,14 +909,6 @@ struct ManualAuditView: View {
         return "-\(formatPlaybackTime(remaining))"
     }
     
-    private func fetchProject() -> Project? {
-        let descriptor = FetchDescriptor<Project>(
-            predicate: #Predicate { project in
-                project.id == projectID
-            }
-        )
-        return try? modelContext.fetch(descriptor).first
-    }
 }
 
 private struct WaveformView: View {
