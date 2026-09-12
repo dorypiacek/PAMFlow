@@ -5,6 +5,7 @@
 //  Created by Dory on 12/09/2026.
 //
 import Foundation
+import SwiftUI
 
 /// A selectable workflow capability included in a particular build.
 @MainActor
@@ -31,6 +32,8 @@ struct ModuleContext {
 protocol ModuleCoordinating: AnyObject {
     var moduleID: ModuleID { get }
 
+    func startProject() -> AnyView
+    func makeScreen(for route: ModuleScreenRoute) -> AnyView
     func openLatestProject(_ project: Project)
     func openReadOnlyProject(_ project: Project)
 }

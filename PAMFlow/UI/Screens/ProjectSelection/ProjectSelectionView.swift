@@ -24,6 +24,7 @@ struct ProjectSelectionView: View {
             projects: projects,
             selectedGroup: selectedProjectGroup,
             searchText: searchText,
+            moduleCatalog: appCoordinator.moduleCatalog,
             auditProgress: auditProgress(for:),
             summary: summary(for:),
             folderExists: projectFolderExists(_:)

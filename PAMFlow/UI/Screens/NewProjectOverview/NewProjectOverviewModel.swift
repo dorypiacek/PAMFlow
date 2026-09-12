@@ -162,7 +162,7 @@ final class NewProjectOverviewModel {
 
     /// Delegates navigation to the project setup screen for a removed project.
     func openProjectSetup(for project: Project, coordinator: AppCoordinating) {
-        coordinator.openProjectSetup(module: WorkflowModule.module(for: project.moduleID))
+        coordinator.openModule(moduleID: ModuleID(rawValue: project.moduleID))
     }
 
     /// Delegates navigation to the project list when no project is available.

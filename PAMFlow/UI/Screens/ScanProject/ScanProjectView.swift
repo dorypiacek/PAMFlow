@@ -136,7 +136,7 @@ struct ScanProjectView: View {
             return
         }
 
-        appCoordinator.openProjectSetup(module: WorkflowModule.module(for: project.moduleID))
+        appCoordinator.openModule(moduleID: ModuleID(rawValue: project.moduleID))
     }
 
     private func fetchProject() -> Project? {

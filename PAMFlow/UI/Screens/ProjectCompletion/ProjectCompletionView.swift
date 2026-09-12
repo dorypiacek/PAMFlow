@@ -141,7 +141,7 @@ struct ProjectCompletionView: View {
                         spacing: Spacing.small
                     ) {
                         overviewMetric(Strings.ProjectCompletion.project, project.name)
-                        overviewMetric(Strings.ProjectCompletion.type, module.title)
+                        overviewMetric(Strings.ProjectCompletion.type, moduleName(for: project))
                         overviewMetric(Strings.ProjectCompletion.processedBy, processedBy(for: project))
                         overviewMetric(Strings.Common.status, project.workflowStatus.title)
                         if let rootFolderURL = project.rootFolderURL {
@@ -306,7 +306,7 @@ struct ProjectCompletionView: View {
                 spacing: Spacing.small
             ) {
                 overviewMetric(Strings.ProjectCompletion.project, project.name)
-                overviewMetric(Strings.ProjectCompletion.type, module.title)
+                overviewMetric(Strings.ProjectCompletion.type, moduleName(for: project))
                 overviewMetric(Strings.ProjectCompletion.processedBy, processedBy)
                 overviewMetric(Strings.Common.status, project.workflowStatus.title)
                 overviewPathMetric(Strings.ProjectCompletion.inputFolder, project.rawInputFolderURL?.path ?? summary.inputFolder)
@@ -482,6 +482,10 @@ struct ProjectCompletionView: View {
 
     private func exportFieldDefaultsKey(_ module: WorkflowModule) -> String {
         "pamflow.export.fields.\(module.id)"
+    }
+
+    private func moduleName(for project: Project) -> String {
+        appCoordinator.moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details.name ?? project.moduleID
     }
 
     private func loadSummary() {
@@ -826,4 +830,5 @@ private struct ExportFieldCustomisationSheet: View {
         let adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
         selectedFieldIDs.insert(fieldID, at: adjustedTargetIndex)
     }
+
 }

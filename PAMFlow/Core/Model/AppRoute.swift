@@ -15,14 +15,21 @@ enum AppRoute: Hashable {
     case welcome
     case projectSelection
     case dataTypeSelection
-    case projectSetup(module: WorkflowModule)
-    case scanProject(projectID: UUID)
-    case newProjectOverview(projectID: UUID)
-    case sharkTrackProcessing(projectID: UUID)
-    case manualAudit(projectID: UUID, startAtLastReviewed: Bool = false)
-    case manualAuditOverview(projectID: UUID)
-    case pamguardSetup(projectID: UUID)
-    case pamguardWaiting(projectID: UUID)
-    case pamguardProcessing(projectID: UUID)
-    case projectCompletion(projectID: UUID)
+    case moduleFlow(moduleID: ModuleID)
+    case moduleScreen(ModuleScreenRoute)
+}
+
+/// A screen owned by a feature module workflow.
+struct ModuleScreenRoute: Hashable {
+    let moduleID: ModuleID
+    let screenID: String
+    let projectID: UUID
+    let startAtLastReviewed: Bool
+
+    init(moduleID: ModuleID, screenID: String, projectID: UUID, startAtLastReviewed: Bool = false) {
+        self.moduleID = moduleID
+        self.screenID = screenID
+        self.projectID = projectID
+        self.startAtLastReviewed = startAtLastReviewed
+    }
 }

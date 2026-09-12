@@ -27,7 +27,7 @@ struct DataTypeSelectionView: View {
                 HStack(spacing: Spacing.large) {
                     ForEach(appCoordinator.moduleCatalog.details, id: \.id) { module in
                         DataTypeButton(module: module) {
-                            appCoordinator.openProjectSetup(moduleID: module.id)
+                            appCoordinator.openModule(moduleID: module.id)
                         }
                     }
                 }
@@ -55,7 +55,7 @@ private struct DataTypeButton: View {
                 Image(systemName: module.iconName)
                     .font(.system(size: Metrics.Layout.dataTypeIconSize, weight: .semibold))
 
-                Text(module.title)
+                Text(module.name)
                     .font(Fonts.subtitle.bold())
                     .multilineTextAlignment(.center)
 

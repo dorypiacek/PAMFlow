@@ -14,7 +14,7 @@ final class ModuleCatalog {
 
     var modules: [FeatureModule] {
         modulesByID.values.sorted { lhs, rhs in
-            lhs.details.title.localizedStandardCompare(rhs.details.title) == .orderedAscending
+            lhs.details.name.localizedStandardCompare(rhs.details.name) == .orderedAscending
         }
     }
 

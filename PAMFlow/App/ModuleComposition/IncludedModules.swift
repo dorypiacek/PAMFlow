@@ -9,9 +9,42 @@ import Foundation
 /// Build-composition entry point for feature modules included in this app.
 @MainActor
 enum IncludedModules {
-    static func makeCatalog() -> ModuleCatalog {
-        ModuleCatalog(
-            modules: WorkflowModule.allCases.map { IncludedWorkflowModule(workflowModule: $0) }
-        )
+    static func makeCatalog(provider: IncludedModuleProviding? = nil) -> ModuleCatalog {
+        ModuleCatalog(modules: (provider ?? StaticIncludedModuleProvider()).modules)
     }
+}
+
+@MainActor
+protocol IncludedModuleProviding {
+    var modules: [FeatureModule] { get }
+}
+
+@MainActor
+struct StaticIncludedModuleProvider: IncludedModuleProviding {
+    private let includedProjectTypes: [IncludedProjectType]
+
+    init(includedProjectTypes: [IncludedProjectType] = IncludedProjectType.allCases) {
+        self.includedProjectTypes = includedProjectTypes
+    }
+
+    var modules: [FeatureModule] {
+        includedProjectTypes.map(makeModule)
+    }
+
+    private func makeModule(for projectType: IncludedProjectType) -> FeatureModule {
+        switch projectType {
+        case .pam:
+            PAMWorkflowModule()
+        case .bruv:
+            BRUVWorkflowModule()
+        case .ruv:
+            RUVWorkflowModule()
+        }
+    }
+}
+
+enum IncludedProjectType: CaseIterable {
+    case pam
+    case bruv
+    case ruv
 }

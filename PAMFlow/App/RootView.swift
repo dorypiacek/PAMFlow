@@ -32,61 +32,25 @@ struct RootView: View {
         case .dataTypeSelection:
             DataTypeSelectionView()
 
-        case .projectSetup(module: let module):
-            ProjectSetupView(
-                module: module,
-                projectFileService: appCoordinator.dependencies.projectFileService,
-                fileSelectionService: appCoordinator.dependencies.fileSelectionService
-            )
+        case .moduleFlow(moduleID: let moduleID):
+            if let module = appCoordinator.moduleCatalog.module(for: moduleID) {
+                module.makeCoordinator(
+                    context: ModuleContext(dependencies: appCoordinator.dependencies, appCoordinator: appCoordinator)
+                )
+                .startProject()
+            } else {
+                ProjectSelectionView()
+            }
 
-        case .scanProject(projectID: let projectID):
-            ScanProjectView(projectID: projectID)
-            
-        case .newProjectOverview(projectID: let projectID):
-            NewProjectOverviewView(
-                projectID: projectID,
-                projectScanService: appCoordinator.dependencies.projectScanService
-            )
-
-        case .sharkTrackProcessing(projectID: let projectID):
-            SharkTrackProcessingView(projectID: projectID)
-
-        case .manualAudit(projectID: let projectID, startAtLastReviewed: let startAtLastReviewed):
-            ManualAuditView(
-                projectID: projectID,
-                startAtLastReviewed: startAtLastReviewed,
-                projectScanService: appCoordinator.dependencies.projectScanService,
-                audioPreviewCacheService: appCoordinator.dependencies.audioPreviewCacheService
-            )
-
-        case .manualAuditOverview(projectID: let projectID):
-            ManualAuditOverviewView(
-                projectID: projectID,
-                projectScanService: appCoordinator.dependencies.projectScanService
-            )
-
-        case .pamguardSetup(projectID: let projectID):
-            PAMGuardSetupView(
-                projectID: projectID,
-                projectScanService: appCoordinator.dependencies.projectScanService,
-                preparationService: appCoordinator.dependencies.pamGuardPreparationService
-            )
-
-        case .pamguardWaiting(projectID: let projectID):
-            PAMGuardWaitingView(projectID: projectID)
-
-        case .pamguardProcessing(projectID: let projectID):
-            PAMGuardProcessingView(
-                projectID: projectID,
-                projectScanService: appCoordinator.dependencies.projectScanService,
-                processingService: appCoordinator.dependencies.pamGuardDetectionProcessingService
-            )
-
-        case .projectCompletion(projectID: let projectID):
-            ProjectCompletionView(
-                projectID: projectID,
-                projectScanService: appCoordinator.dependencies.projectScanService
-            )
+        case .moduleScreen(let screen):
+            if let module = appCoordinator.moduleCatalog.module(for: screen.moduleID) {
+                module.makeCoordinator(
+                    context: ModuleContext(dependencies: appCoordinator.dependencies, appCoordinator: appCoordinator)
+                )
+                .makeScreen(for: screen)
+            } else {
+                ProjectSelectionView()
+            }
         }
     }
 }

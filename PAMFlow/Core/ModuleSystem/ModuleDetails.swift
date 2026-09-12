@@ -10,7 +10,7 @@ import Foundation
 /// Display and file-selection details for a feature module included in the app.
 struct ModuleDetails: Hashable, Sendable {
     let id: ModuleID
-    let title: String
+    let name: String
     let subtitle: String
     let iconName: String
     let projectNamePrefix: String
@@ -19,7 +19,7 @@ struct ModuleDetails: Hashable, Sendable {
 
     init(
         id: ModuleID,
-        title: String,
+        name: String,
         subtitle: String,
         iconName: String,
         projectNamePrefix: String,
@@ -27,7 +27,7 @@ struct ModuleDetails: Hashable, Sendable {
         supportedFileExtensions: Set<String>
     ) {
         self.id = id
-        self.title = title
+        self.name = name
         self.subtitle = subtitle
         self.iconName = iconName
         self.projectNamePrefix = projectNamePrefix

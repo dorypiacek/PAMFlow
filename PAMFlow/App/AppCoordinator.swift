@@ -25,8 +25,7 @@ protocol AppCoordinating: AnyObject {
     func signOut()
     func selectTheme(_ theme: AppTheme)
     func openDataTypeSelection()
-    func openProjectSetup(moduleID: ModuleID)
-    func openProjectSetup(module: WorkflowModule)
+    func openModule(moduleID: ModuleID)
     func openProjectSelection()
     func goHome()
     func goBack()
@@ -137,15 +136,8 @@ final class AppCoordinator: AppCoordinating {
         route = .dataTypeSelection
     }
 
-    func openProjectSetup(moduleID: ModuleID) {
-        guard let module = WorkflowModule(rawValue: moduleID.rawValue) else {
-            return
-        }
-        openProjectSetup(module: module)
-    }
-
-    func openProjectSetup(module: WorkflowModule) {
-        route = .projectSetup(module: module)
+    func openModule(moduleID: ModuleID) {
+        route = .moduleFlow(moduleID: moduleID)
     }
 
     func openProjectSelection() {
@@ -162,72 +154,75 @@ final class AppCoordinator: AppCoordinating {
             break
         case .dataTypeSelection:
             route = .projectSelection
-        case .projectSetup:
+        case .moduleFlow:
             route = .dataTypeSelection
-        case .scanProject:
+        // TODO: - Move module back-stack decisions into module coordinators.
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.scanProject:
             route = .dataTypeSelection
-        case .newProjectOverview(let projectID):
-            route = .scanProject(projectID: projectID)
-        case .sharkTrackProcessing(let projectID):
-            route = .newProjectOverview(projectID: projectID)
-        case .manualAudit(let projectID, _):
-            route = .newProjectOverview(projectID: projectID)
-        case .manualAuditOverview(let projectID):
-            route = .manualAudit(projectID: projectID, startAtLastReviewed: true)
-        case .pamguardSetup(let projectID):
-            route = .manualAuditOverview(projectID: projectID)
-        case .pamguardWaiting(let projectID):
-            route = .pamguardSetup(projectID: projectID)
-        case .pamguardProcessing(let projectID):
-            route = .pamguardWaiting(projectID: projectID)
-        case .projectCompletion(let projectID):
-            route = .manualAuditOverview(projectID: projectID)
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.projectOverview:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.scanProject, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.sharkTrackProcessing:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.projectOverview, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.manualAudit:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.projectOverview, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.manualAuditOverview:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.manualAudit, projectID: screen.projectID, startAtLastReviewed: true))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.pamguardSetup:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.manualAuditOverview, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.pamguardWaiting:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.pamguardSetup, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.pamguardProcessing:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.pamguardWaiting, projectID: screen.projectID))
+        case .moduleScreen(let screen) where screen.screenID == IncludedWorkflowScreenID.projectCompletion:
+            route = .moduleScreen(ModuleScreenRoute(moduleID: screen.moduleID, screenID: IncludedWorkflowScreenID.manualAuditOverview, projectID: screen.projectID))
+        case .moduleScreen:
+            route = .projectSelection
         }
     }
 
     func scanProject(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .scanProject(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.scanProject, projectID: project.id))
     }
 
     func openNewProjectOverview(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .newProjectOverview(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.projectOverview, projectID: project.id))
     }
 
     func openSharkTrackProcessing(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .sharkTrackProcessing(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.sharkTrackProcessing, projectID: project.id))
     }
 
     func openManualAudit(_ project: Project, startAtLastReviewed: Bool = false) {
         project.lastOpenedAt = .now
-        route = .manualAudit(projectID: project.id, startAtLastReviewed: startAtLastReviewed)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.manualAudit, projectID: project.id, startAtLastReviewed: startAtLastReviewed))
     }
 
     func openManualAuditOverview(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .manualAuditOverview(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.manualAuditOverview, projectID: project.id))
     }
 
     func openPAMGuardSetup(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .pamguardSetup(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.pamguardSetup, projectID: project.id))
     }
 
     func openPAMGuardWaiting(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .pamguardWaiting(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.pamguardWaiting, projectID: project.id))
     }
 
     func openPAMGuardProcessing(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .pamguardProcessing(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.pamguardProcessing, projectID: project.id))
     }
 
     func openProjectCompletion(_ project: Project) {
         project.lastOpenedAt = .now
-        route = .projectCompletion(projectID: project.id)
+        route = .moduleScreen(ModuleScreenRoute(moduleID: ModuleID(rawValue: project.moduleID), screenID: IncludedWorkflowScreenID.projectCompletion, projectID: project.id))
     }
 
     func continueProject(_ project: Project) {

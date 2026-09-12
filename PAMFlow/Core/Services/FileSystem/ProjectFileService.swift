@@ -23,7 +23,7 @@ protocol ProjectFileServicing {
         projectContainerURL: URL
     ) throws -> Project
 
-    func suggestedProjectName(from inputFolderURL: URL, module: WorkflowModule) -> String
+    func suggestedProjectName(from inputFolderURL: URL, projectNamePrefix: String) -> String
     func deleteProjectFolder(for project: Project) throws
     func removeTemporaryArtifacts(for project: Project) throws
 }
@@ -226,10 +226,10 @@ final class ProjectFileService: ProjectFileServicing {
         inputSelection.rawMediaFolderURL ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    func suggestedProjectName(from inputFolderURL: URL, module: WorkflowModule) -> String {
+    func suggestedProjectName(from inputFolderURL: URL, projectNamePrefix: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
-        return "PAMFlow_\(module.projectNamePrefix)_\(formatter.string(from: Date()))"
+        return "PAMFlow_\(projectNamePrefix)_\(formatter.string(from: Date()))"
     }
 
     private func createProjectSubfolders(in rootURL: URL, moduleID: String) throws {

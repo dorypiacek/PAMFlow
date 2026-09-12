@@ -47,6 +47,7 @@ struct ProjectSelectionModel {
     let projects: [Project]
     let selectedGroup: ProjectGroup
     let searchText: String
+    let moduleCatalog: ModuleCatalog
     let auditProgress: AuditProgressProvider
     let summary: SummaryProvider
     let folderExists: FolderExistsProvider
@@ -66,12 +67,13 @@ struct ProjectSelectionModel {
     /// Creates the renderable row model for a project.
     func row(for project: Project) -> ProjectSelectionRowModel {
         let module = WorkflowModule.module(for: project.moduleID)
+        let moduleDetails = moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details
         let exists = folderExists(project)
         return ProjectSelectionRowModel(
             id: project.id,
             project: project,
-            moduleTitle: module.title,
-            moduleIconName: iconName(for: module),
+            moduleTitle: moduleDetails?.name ?? project.moduleID,
+            moduleIconName: moduleDetails?.iconName ?? Icons.folder,
             folderExists: exists,
             statusTitle: exists ? workflowStatusTitle(for: project, module: module) : Strings.ProjectSelection.missingFolder,
             statusColor: exists ? statusColor(project.workflowStatus) : AppColors.error,
@@ -98,7 +100,7 @@ struct ProjectSelectionModel {
         var values = [
             project.name,
             project.id.uuidString,
-            WorkflowModule.module(for: project.moduleID).title,
+            moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details.name ?? project.moduleID,
             project.moduleID,
             project.workflowStatus.title,
             project.metadataOpcode ?? "",
@@ -220,16 +222,5 @@ struct ProjectSelectionModel {
         }
 
         return String(format: Strings.ManualAuditOverview.reviewedFormat, progress.reviewed, progress.total)
-    }
-
-    private func iconName(for module: WorkflowModule) -> String {
-        switch module {
-        case .pamAudio:
-            Icons.audio
-        case .bruvVideo:
-            Icons.video
-        case .ruvImages:
-            Icons.image
-        }
     }
 }
