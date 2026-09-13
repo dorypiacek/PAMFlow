@@ -15,9 +15,24 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		8A287E752FD489470069997C /* PAMFlow */ = {
+		8A287E752FD489470069997C /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = PAMFlow;
+			path = App;
+			sourceTree = "<group>";
+		};
+		8A287E802FD489470069997C /* Core */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Core;
+			sourceTree = "<group>";
+		};
+		8A287E812FD489470069997C /* UI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = UI;
+			sourceTree = "<group>";
+		};
+		8A287E822FD489470069997C /* Modules */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Modules;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -37,7 +52,10 @@
 		8A287E6A2FD489460069997C = {
 			isa = PBXGroup;
 			children = (
-				8A287E752FD489470069997C /* PAMFlow */,
+				8A287E752FD489470069997C /* App */,
+				8A287E802FD489470069997C /* Core */,
+				8A287E812FD489470069997C /* UI */,
+				8A287E822FD489470069997C /* Modules */,
 				8A287E742FD489470069997C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,7 +84,10 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				8A287E752FD489470069997C /* PAMFlow */,
+				8A287E752FD489470069997C /* App */,
+				8A287E802FD489470069997C /* Core */,
+				8A287E812FD489470069997C /* UI */,
+				8A287E822FD489470069997C /* Modules */,
 			);
 			name = PAMFlow;
 			packageProductDependencies = (
