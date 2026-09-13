@@ -9,9 +9,9 @@ import Foundation
 
 /// Stable identifiers for workflow modules supported by PAMFlow.
 enum WorkflowModuleID {
-    static let pamAudio = "pam_audio"
-    static let bruvVideo = "bruv_video"
-    static let ruvImages = "ruv_images"
+    nonisolated static let pamAudio = "pam_audio"
+    nonisolated static let bruvVideo = "bruv_video"
+    nonisolated static let ruvImages = "ruv_images"
 }
 
 /// Supported data-processing modules.

@@ -24,7 +24,7 @@ protocol SharkTrackProcessingViewModelType: AnyObject {
     var progress: Double { get }
 
     /// Runs SharkTrack preparation for the project and advances the workflow when finished.
-    func processProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async
+    func processProject(modelContext: ModelContext, workflowActions: WorkflowActionHandling) async
     /// Keeps progress moving during SharkTrack runtime phases that do not emit frame callbacks.
     func runProgressHeartbeat() async
 }
@@ -60,19 +60,29 @@ final class SharkTrackProcessingViewModel: SharkTrackProcessingViewModelType {
 
     /// Identifier of the project being processed.
     private let projectID: UUID
+    /// Service that prepares SharkTrack output for manual audit.
+    private let sharkTrackService: SharkTrackServicing
+    /// Service used to reload the scan summary after SharkTrack processing.
+    private let projectScanService: ProjectScanServicing
 
-    /// Creates processing state for a persisted BRUV/RUV project.
-    init(projectID: UUID) {
+    /// Creates processing state for a persisted visual project.
+    init(
+        projectID: UUID,
+        sharkTrackService: SharkTrackServicing,
+        projectScanService: ProjectScanServicing
+    ) {
         self.projectID = projectID
+        self.sharkTrackService = sharkTrackService
+        self.projectScanService = projectScanService
     }
 
     /// Prepares the initial audit batch, stores the updated scan summary, and opens the next module step.
-    func processProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async {
+    func processProject(modelContext: ModelContext, workflowActions: WorkflowActionHandling) async {
         guard !isProcessing, let project = fetchProject(modelContext: modelContext) else { return }
 
         let module = WorkflowModule.module(for: project.moduleID)
         guard module.requiresSharkTrack else {
-            appCoordinator.goToNextStep(for: project)
+            workflowActions.goToNextStep(for: project)
             return
         }
 
@@ -88,14 +98,14 @@ final class SharkTrackProcessingViewModel: SharkTrackProcessingViewModelType {
         totalFileCount = 1
 
         do {
-            try await appCoordinator.dependencies.sharkTrackService.prepareInitialAuditBatch(for: project) { update in
+            try await sharkTrackService.prepareInitialAuditBatch(for: project) { update in
                 Task { @MainActor in
                     self.apply(update)
                 }
             }
 
             statusMessage = Strings.SharkTrackProcessing.finalizingMessage
-            let summary = try appCoordinator.dependencies.projectScanService.loadSummary(for: project)
+            let summary = try projectScanService.loadSummary(for: project)
             project.workflowStatus = summary.fileCount > 0 ? .manualAuditInProgress : .manualAuditCompleted
             project.lastOpenedAt = .now
             try project.storeScanSummary(summary)
@@ -104,7 +114,7 @@ final class SharkTrackProcessingViewModel: SharkTrackProcessingViewModelType {
             if summary.fileCount == 0 {
                 AppLog.sharkTrack("No SharkTrack review detections found; opening overview without error")
             }
-            appCoordinator.goToNextStep(for: project)
+            workflowActions.goToNextStep(for: project)
         } catch {
             AppLog.sharkTrack("Processing screen failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription

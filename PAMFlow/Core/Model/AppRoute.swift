@@ -15,8 +15,7 @@ enum AppRoute: Hashable {
     case welcome
     case projectSelection
     case dataTypeSelection
-    case moduleFlow(moduleID: ModuleID)
-    case moduleScreen(ModuleScreenRoute)
+    case moduleWorkflow
 }
 
 /// A screen owned by a feature module workflow.

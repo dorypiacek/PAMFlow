@@ -5,28 +5,38 @@
 //  Created by Dory on 08/06/2026.
 //
 
-import AVFoundation
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 
 /// Scan operations and summary loading used across processing and overview screens.
 @MainActor
 protocol ProjectScanServicing {
-    func scan(
+    /// Discovers source files that match a module-provided extension list.
+    func scanInventory(
         project: Project,
+        supportedFileExtensions: Set<String>,
         onProgress: @escaping @Sendable (ProjectScanService.Progress) -> Void
-    ) async throws -> ProjectScanSummary
+    ) async throws -> ProjectScanInventory
 
+    /// Creates and writes the persisted scan summary after module-specific analysis.
+    func makeSummary(
+        inventory: ProjectScanInventory,
+        analyzedFiles: [ProjectScanFile],
+        warnings: [String]
+    ) throws -> ProjectScanSummary
+
+    /// Loads the scan summary that was previously written into the project work folder.
     func loadSummary(for project: Project) throws -> ProjectScanSummary
 }
 
-/// Runs the technical scan step and loads its summary output.
+/// Discovers project input files and loads persisted scan summaries.
 ///
-/// The service owns the temporary `work/recording_summary.json` contract for
-/// processing services. The durable copy lives on the Project model so overview
-/// and exports can still work when a project folder is unavailable.
+/// Core owns only the module-agnostic parts of scanning: resolving project
+/// folders, enumerating files, emitting progress, and serializing the shared
+/// summary format. Feature modules decide which file types to include and how to
+/// analyze each file before asking Core to write the final summary.
 final class ProjectScanService: ProjectScanServicing {
+    init() {}
+
     /// User-visible scan progress emitted by the scanner process.
     struct Progress: Sendable {
         let currentFileIndex: Int?
@@ -64,11 +74,12 @@ final class ProjectScanService: ProjectScanServicing {
         }
     }
 
-    /// Scans a project's input folder and returns the parsed summary.
-    func scan(
+    /// Resolves a project folder and inventories files supported by the calling module.
+    func scanInventory(
         project: Project,
+        supportedFileExtensions: Set<String>,
         onProgress: @escaping @Sendable (Progress) -> Void = { _ in }
-    ) async throws -> ProjectScanSummary {
+    ) async throws -> ProjectScanInventory {
         AppLog.info("Starting scan for project '\(project.name)' (\(project.id.uuidString))")
         guard let projectRootURL = project.rootFolderURL else {
             AppLog.info("Scan failed before start: missing project folder bookmark")
@@ -85,10 +96,9 @@ final class ProjectScanService: ProjectScanServicing {
         AppLog.info("Resolved input folder: \(inputFolderURL.path)")
         AppLog.info("Resolved raw input folder: \(displayInputFolderURL.path)")
 
-        let module = WorkflowModule.module(for: project.moduleID)
-        let summary = try await Task.detached {
-            try await self.scanMediaData(
-                module: module,
+        let inventory = try await Task.detached {
+            try self.scanProjectFiles(
+                supportedFileExtensions: supportedFileExtensions,
                 projectRootURL: projectRootURL,
                 inputFolderURL: inputFolderURL,
                 displayInputFolderURL: displayInputFolderURL,
@@ -97,7 +107,23 @@ final class ProjectScanService: ProjectScanServicing {
             )
         }.value
 
-        AppLog.info("Scan decoded summary: \(summary.fileCount) files, \(summary.qualityWarningCount) warnings")
+        AppLog.info("Scan inventoried \(inventory.files.count) files")
+        return inventory
+    }
+
+    /// Builds and writes the shared scan summary after a module analyzes the inventory.
+    func makeSummary(
+        inventory: ProjectScanInventory,
+        analyzedFiles: [ProjectScanFile],
+        warnings: [String]
+    ) throws -> ProjectScanSummary {
+        let summary = buildMediaSummary(
+            inventory: inventory,
+            files: analyzedFiles,
+            warnings: warnings
+        )
+        try Self.writeSummary(summary, projectRootURL: inventory.projectRootURL)
+        AppLog.scan("Native media scan complete")
         return summary
     }
 
@@ -154,14 +180,14 @@ final class ProjectScanService: ProjectScanServicing {
         return try Data(contentsOf: summaryURL)
     }
 
-    nonisolated private func scanMediaData(
-        module: WorkflowModule,
+    nonisolated private func scanProjectFiles(
+        supportedFileExtensions: Set<String>,
         projectRootURL: URL,
         inputFolderURL: URL,
         displayInputFolderURL: URL,
         recorderID: String,
         onProgress: @escaping @Sendable (Progress) -> Void
-    ) async throws -> ProjectScanSummary {
+    ) throws -> ProjectScanInventory {
         let accessedProject = projectRootURL.startAccessingSecurityScopedResource()
         let accessedInput = inputFolderURL.startAccessingSecurityScopedResource()
         AppLog.scan("Native media scan security scope project=\(accessedProject) input=\(accessedInput)")
@@ -176,7 +202,7 @@ final class ProjectScanService: ProjectScanServicing {
             }
         }
 
-        let mediaURLs = try supportedMediaURLs(in: inputFolderURL, module: module)
+        let mediaURLs = try supportedMediaURLs(in: inputFolderURL, supportedFileExtensions: supportedFileExtensions)
         onProgress(Progress(
             currentFileIndex: mediaURLs.isEmpty ? 0 : nil,
             totalFileCount: mediaURLs.count,
@@ -186,7 +212,7 @@ final class ProjectScanService: ProjectScanServicing {
                 : String(format: Strings.ProjectScan.supportedFilesFoundFormat, mediaURLs.count)
         ))
 
-        var files: [ProjectScanFile] = []
+        var files: [ProjectScanFileInfo] = []
         for (offset, url) in mediaURLs.enumerated() {
             let index = offset + 1
             let relativePath = relativePath(for: url, inputFolderURL: inputFolderURL)
@@ -198,85 +224,22 @@ final class ProjectScanService: ProjectScanServicing {
                 message: String(format: Strings.ProjectScan.scanningFileFormat, index, mediaURLs.count)
             ))
 
-            let file: ProjectScanFile
-            switch module {
-            case .pamAudio:
-                file = scanAudio(url: url, inputFolderURL: inputFolderURL)
-            case .bruvVideo:
-                file = await scanVideo(url: url, inputFolderURL: inputFolderURL)
-            case .ruvImages:
-                file = scanImage(url: url, inputFolderURL: inputFolderURL)
-            }
-            files.append(file)
+            files.append(fileInfo(for: url, inputFolderURL: inputFolderURL))
         }
 
-        let summary = buildMediaSummary(
+        return ProjectScanInventory(
             projectRootURL: projectRootURL,
             inputFolderURL: inputFolderURL,
             displayInputFolderURL: displayInputFolderURL,
             recorderID: recorderID,
-            module: module,
             files: files
         )
-        try Self.writeSummary(summary, projectRootURL: projectRootURL)
-        AppLog.scan("Native media scan complete")
-        return summary
     }
 
-    nonisolated private func scanAudio(url: URL, inputFolderURL: URL) -> ProjectScanFile {
-        let sizeBytes = fileSize(url)
-        let relativePath = relativePath(for: url, inputFolderURL: inputFolderURL)
-
-        do {
-            let audioFile = try AVAudioFile(forReading: url)
-            let format = audioFile.processingFormat
-            let sampleRate = format.sampleRate
-            let channelCount = Int(format.channelCount)
-            let durationSeconds = sampleRate > 0 ? Double(audioFile.length) / sampleRate : nil
-            let bitDepth = (audioFile.fileFormat.settings[AVLinearPCMBitDepthKey] as? NSNumber)?.intValue
-
-            let metrics = try audioLevelMetrics(audioFile: audioFile, format: format)
-            let reasons = audioQualityReasons(
-                durationSeconds: durationSeconds,
-                sizeBytes: sizeBytes,
-                peak: metrics.peak,
-                clippingPercent: metrics.clippingPercent,
-                nearZeroPercent: metrics.nearZeroPercent,
-                rms: metrics.rms
-            )
-
-            return ProjectScanFile(
-                fileName: url.lastPathComponent,
-                relativePath: relativePath,
-                sizeBytes: sizeBytes,
-                readable: true,
-                readError: "",
-                durationSeconds: durationSeconds,
-                sampleRateHz: Int(sampleRate.rounded()),
-                channels: channelCount,
-                bitDepth: bitDepth,
-                format: url.pathExtension.uppercased(),
-                width: nil,
-                height: nil,
-                frameNumber: nil,
-                maxN: nil,
-                frameCount: nil,
-                frameRate: nil,
-                sharkTrackStatus: nil,
-                sharkTrackPreviewPath: nil,
-                peakDBFS: decibelsFullScale(metrics.peak),
-                rmsDBFS: decibelsFullScale(metrics.rms),
-                clippingPercent: metrics.clippingPercent,
-                nearZeroPercent: metrics.nearZeroPercent,
-                qualityFlag: reasons.isEmpty ? "OK" : "CHECK",
-                qualityReasons: reasons
-            )
-        } catch {
-            return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: error.localizedDescription)
-        }
-    }
-
-    nonisolated private func supportedMediaURLs(in inputFolderURL: URL, module: WorkflowModule) throws -> [URL] {
+    nonisolated private func supportedMediaURLs(
+        in inputFolderURL: URL,
+        supportedFileExtensions: Set<String>
+    ) throws -> [URL] {
         let resourceKeys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey]
         guard let enumerator = FileManager.default.enumerator(
             at: inputFolderURL,
@@ -286,7 +249,6 @@ final class ProjectScanService: ProjectScanServicing {
             return []
         }
 
-        let extensions = module.supportedFileExtensions
         return enumerator
             .compactMap { $0 as? URL }
             .filter { url in
@@ -294,7 +256,7 @@ final class ProjectScanService: ProjectScanServicing {
                 let isSupportedFile = values?.isRegularFile == true ||
                     (values?.isSymbolicLink == true && FileManager.default.fileExists(atPath: url.resolvingSymlinksInPath().path))
                 return isSupportedFile &&
-                    extensions.contains(url.pathExtension.lowercased()) &&
+                    supportedFileExtensions.contains(url.pathExtension.lowercased()) &&
                     !isGeneratedProjectArtifact(url, inputFolderURL: inputFolderURL)
             }
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
@@ -315,174 +277,20 @@ final class ProjectScanService: ProjectScanServicing {
         }
     }
 
-    nonisolated private func scanImage(url: URL, inputFolderURL: URL) -> ProjectScanFile {
-        let sizeBytes = fileSize(url)
-        let relativePath = relativePath(for: url, inputFolderURL: inputFolderURL)
-        guard
-            let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-            let width = properties[kCGImagePropertyPixelWidth] as? Int,
-            let height = properties[kCGImagePropertyPixelHeight] as? Int
-        else {
-            return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: Strings.ProjectScan.imageMetadataUnreadable)
-        }
-
-        let reasons = imageQualityReasons(width: width, height: height, sizeBytes: sizeBytes)
-        return ProjectScanFile(
-            fileName: url.lastPathComponent,
-            relativePath: relativePath,
-            sizeBytes: sizeBytes,
-            readable: true,
-            readError: "",
-            durationSeconds: nil,
-            sampleRateHz: nil,
-            channels: nil,
-            bitDepth: nil,
-            format: url.pathExtension.uppercased(),
-            width: width,
-            height: height,
-            frameNumber: 1,
-            maxN: nil,
-            frameCount: 1,
-            frameRate: nil,
-            sharkTrackStatus: ProjectScanStatus.pending,
-            sharkTrackPreviewPath: nil,
-            peakDBFS: nil,
-            rmsDBFS: nil,
-            clippingPercent: nil,
-            nearZeroPercent: nil,
-            qualityFlag: reasons.isEmpty ? "OK" : "CHECK",
-            qualityReasons: reasons
-        )
-    }
-
-    nonisolated private func scanVideo(url: URL, inputFolderURL: URL) async -> ProjectScanFile {
-        let sizeBytes = fileSize(url)
-        let relativePath = relativePath(for: url, inputFolderURL: inputFolderURL)
-        let asset = AVURLAsset(url: url)
-
-        let durationSeconds: Double
-        let videoTrack: AVAssetTrack
-        do {
-            let duration = try await asset.load(.duration)
-            let tracks = try await asset.loadTracks(withMediaType: .video)
-            durationSeconds = CMTimeGetSeconds(duration)
-            guard let firstVideoTrack = tracks.first else {
-                return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: Strings.ProjectScan.videoTrackUnreadable)
-            }
-            videoTrack = firstVideoTrack
-        } catch {
-            return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: error.localizedDescription)
-        }
-
-        guard durationSeconds.isFinite, durationSeconds > 0 else {
-            return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: Strings.ProjectScan.videoMetadataUnreadable)
-        }
-
-        let naturalSize: CGSize
-        let preferredTransform: CGAffineTransform
-        let nominalFrameRate: Float
-        do {
-            naturalSize = try await videoTrack.load(.naturalSize)
-            preferredTransform = try await videoTrack.load(.preferredTransform)
-            nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
-        } catch {
-            return mediaErrorFile(url: url, inputFolderURL: inputFolderURL, message: error.localizedDescription)
-        }
-
-        let transformedSize = naturalSize.applying(preferredTransform)
-        let width = Int(abs(transformedSize.width).rounded())
-        let height = Int(abs(transformedSize.height).rounded())
-        let frameRate = Double(nominalFrameRate)
-        let frameCount = frameRate > 0 ? Int((durationSeconds * frameRate).rounded()) : nil
-        let reasons = videoQualityReasons(
-            durationSeconds: durationSeconds,
-            width: width,
-            height: height,
-            frameRate: frameRate,
-            frameCount: frameCount,
-            sizeBytes: sizeBytes
-        )
-
-        return ProjectScanFile(
-            fileName: url.lastPathComponent,
-            relativePath: relativePath,
-            sizeBytes: sizeBytes,
-            readable: true,
-            readError: "",
-            durationSeconds: durationSeconds,
-            sampleRateHz: nil,
-            channels: nil,
-            bitDepth: nil,
-            format: url.pathExtension.uppercased(),
-            width: width,
-            height: height,
-            frameNumber: nil,
-            maxN: nil,
-            frameCount: frameCount,
-            frameRate: frameRate > 0 ? frameRate : nil,
-            sharkTrackStatus: ProjectScanStatus.pending,
-            sharkTrackPreviewPath: nil,
-            peakDBFS: nil,
-            rmsDBFS: nil,
-            clippingPercent: nil,
-            nearZeroPercent: nil,
-            qualityFlag: reasons.isEmpty ? "OK" : "CHECK",
-            qualityReasons: reasons
-        )
-    }
-
-    nonisolated private func mediaErrorFile(
-        url: URL,
-        inputFolderURL: URL,
-        message: String
-    ) -> ProjectScanFile {
-        ProjectScanFile(
-            fileName: url.lastPathComponent,
-            relativePath: relativePath(for: url, inputFolderURL: inputFolderURL),
-            sizeBytes: fileSize(url),
-            readable: false,
-            readError: message,
-            durationSeconds: nil,
-            sampleRateHz: nil,
-            channels: nil,
-            bitDepth: nil,
-            format: url.pathExtension.uppercased(),
-            width: nil,
-            height: nil,
-            frameNumber: nil,
-            maxN: nil,
-            frameCount: nil,
-            frameRate: nil,
-            sharkTrackStatus: ProjectScanStatus.unavailable,
-            sharkTrackPreviewPath: nil,
-            peakDBFS: nil,
-            rmsDBFS: nil,
-            clippingPercent: nil,
-            nearZeroPercent: nil,
-            qualityFlag: ProjectQuality.check,
-            qualityReasons: [ProjectQuality.readError]
-        )
-    }
-
     nonisolated private func buildMediaSummary(
-        projectRootURL: URL,
-        inputFolderURL: URL,
-        displayInputFolderURL: URL,
-        recorderID: String,
-        module: WorkflowModule,
-        files: [ProjectScanFile]
+        inventory: ProjectScanInventory,
+        files: [ProjectScanFile],
+        warnings: [String]
     ) -> ProjectScanSummary {
         let readableFiles = files.filter(\.readable)
         let durations = readableFiles.compactMap(\.durationSeconds)
         let frameCounts = readableFiles.compactMap(\.frameCount)
         let totalSizeBytes = files.reduce(0) { $0 + $1.sizeBytes }
-        let warnings = mediaWarnings(files: files, module: module, totalSizeBytes: totalSizeBytes)
 
         return ProjectScanSummary(
-            projectName: projectRootURL.lastPathComponent,
-            recorderID: recorderID,
-            inputFolder: displayInputFolderURL.path,
+            projectName: inventory.projectRootURL.lastPathComponent,
+            recorderID: inventory.recorderID,
+            inputFolder: inventory.displayInputFolderURL.path,
             scannedAt: .now,
             fileCount: files.count,
             readableFileCount: readableFiles.count,
@@ -678,190 +486,15 @@ final class ProjectScanService: ProjectScanServicing {
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
-    nonisolated private func imageQualityReasons(width: Int, height: Int, sizeBytes: Int) -> [String] {
-        var reasons: [String] = []
-        if width <= 0 || height <= 0 {
-            reasons.append("BAD_RESOLUTION")
-        }
-        if width < 640 || height < 480 {
-            reasons.append("LOW_RESOLUTION")
-        }
-        if sizeBytes == 0 {
-            reasons.append("EMPTY_FILE")
-        }
-        return reasons
-    }
-
-    nonisolated private func videoQualityReasons(
-        durationSeconds: Double,
-        width: Int,
-        height: Int,
-        frameRate: Double,
-        frameCount: Int?,
-        sizeBytes: Int
-    ) -> [String] {
-        var reasons: [String] = []
-        if durationSeconds <= 0 {
-            reasons.append("BAD_DURATION")
-        }
-        if width <= 0 || height <= 0 {
-            reasons.append("BAD_RESOLUTION")
-        }
-        if width < 640 || height < 480 {
-            reasons.append("LOW_RESOLUTION")
-        }
-        if frameRate <= 0 {
-            reasons.append("UNKNOWN_FRAME_RATE")
-        }
-        if frameCount == nil || frameCount == 0 {
-            reasons.append("NO_FRAMES_ESTIMATED")
-        }
-        if sizeBytes == 0 {
-            reasons.append("EMPTY_FILE")
-        }
-        return reasons
-    }
-
-    nonisolated private func audioLevelMetrics(
-        audioFile: AVAudioFile,
-        format: AVAudioFormat
-    ) throws -> AudioLevelMetrics {
-        let frameCapacity = AVAudioFrameCount(262_144)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-
-        audioFile.framePosition = 0
-        let channelCount = max(Int(format.channelCount), 1)
-        var sampleCount = 0
-        var peak = 0.0
-        var sumSquares = 0.0
-        var clippingCount = 0
-        var nearZeroCount = 0
-        let clippingThreshold = 0.999
-        let nearZeroThreshold = 1.0 / 32_768.0
-
-        while audioFile.framePosition < audioFile.length {
-            let remainingFrames = audioFile.length - audioFile.framePosition
-            let framesToRead = AVAudioFrameCount(min(Int64(frameCapacity), remainingFrames))
-            try audioFile.read(into: buffer, frameCount: framesToRead)
-            let frameLength = Int(buffer.frameLength)
-            guard frameLength > 0 else { break }
-
-            guard let channelData = buffer.floatChannelData else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-
-            for channel in 0..<channelCount {
-                let samples = channelData[channel]
-                for frame in 0..<frameLength {
-                    let absoluteSample = abs(Double(samples[frame]))
-                    peak = max(peak, absoluteSample)
-                    sumSquares += absoluteSample * absoluteSample
-                    sampleCount += 1
-
-                    if absoluteSample >= clippingThreshold {
-                        clippingCount += 1
-                    }
-
-                    if absoluteSample <= nearZeroThreshold {
-                        nearZeroCount += 1
-                    }
-                }
-            }
-        }
-
-        guard sampleCount > 0 else {
-            return AudioLevelMetrics(peak: 0, rms: 0, clippingPercent: 0, nearZeroPercent: 100)
-        }
-
-        return AudioLevelMetrics(
-            peak: peak,
-            rms: sqrt(sumSquares / Double(sampleCount)),
-            clippingPercent: Double(clippingCount) / Double(sampleCount) * 100,
-            nearZeroPercent: Double(nearZeroCount) / Double(sampleCount) * 100
+    nonisolated private func fileInfo(for url: URL, inputFolderURL: URL) -> ProjectScanFileInfo {
+        ProjectScanFileInfo(
+            url: url,
+            inputFolderURL: inputFolderURL,
+            fileName: url.lastPathComponent,
+            relativePath: relativePath(for: url, inputFolderURL: inputFolderURL),
+            sizeBytes: fileSize(url),
+            format: url.pathExtension.uppercased()
         )
-    }
-
-    nonisolated private func audioQualityReasons(
-        durationSeconds: Double?,
-        sizeBytes: Int,
-        peak: Double,
-        clippingPercent: Double,
-        nearZeroPercent: Double,
-        rms: Double
-    ) -> [String] {
-        var reasons: [String] = []
-        if durationSeconds == nil || durationSeconds == 0 {
-            reasons.append("BAD_DURATION")
-        }
-        if sizeBytes == 0 {
-            reasons.append("EMPTY_FILE")
-        }
-        if peak >= 0.999 {
-            reasons.append("CLIPPING_OR_NEAR_CLIPPING")
-        }
-        if clippingPercent >= 0.01 {
-            reasons.append("MANY_CLIPPED_SAMPLES")
-        }
-        if rms <= 0.0001 {
-            reasons.append("VERY_LOW_LEVEL")
-        }
-        if nearZeroPercent >= 95 {
-            reasons.append("MOSTLY_NEAR_ZERO")
-        }
-        return reasons
-    }
-
-    nonisolated private func decibelsFullScale(_ normalizedLevel: Double) -> Double {
-        guard normalizedLevel > 0 else { return -120 }
-        return 20 * log10(normalizedLevel)
-    }
-
-    nonisolated private func mediaWarnings(
-        files: [ProjectScanFile],
-        module: WorkflowModule,
-        totalSizeBytes: Int
-    ) -> [String] {
-        var warnings: [String] = []
-        if files.isEmpty {
-            switch module {
-            case .pamAudio:
-                warnings.append(Strings.ProjectScan.noWAVFilesFound)
-            case .bruvVideo:
-                warnings.append(Strings.ProjectScan.noVideoFilesFound)
-            case .ruvImages:
-                warnings.append(Strings.ProjectScan.noImageFilesFound)
-            }
-        }
-        if files.contains(where: { !$0.readable }) {
-            warnings.append(Strings.ProjectScan.unreadableFilesFound)
-        }
-        if module == .pamAudio, Set(files.compactMap(\.sampleRateHz)).count > 1 {
-            warnings.append(Strings.ProjectScan.multipleSampleRatesFound)
-        }
-        if module == .pamAudio, files.contains(where: { $0.qualityReasons.contains("CLIPPING_OR_NEAR_CLIPPING") || $0.qualityReasons.contains("MANY_CLIPPED_SAMPLES") }) {
-            warnings.append(Strings.ProjectScan.clippedFilesFound)
-        }
-        if module == .pamAudio, files.contains(where: { $0.qualityReasons.contains("MOSTLY_NEAR_ZERO") || $0.qualityReasons.contains("VERY_LOW_LEVEL") }) {
-            warnings.append(Strings.ProjectScan.nearlyEmptyFilesFound)
-        }
-        if module != .pamAudio, Set(files.compactMap(\.format)).count > 1 {
-            warnings.append("Multiple file formats found.")
-        }
-        if module != .pamAudio, Set(files.compactMap { file -> String? in
-            guard let width = file.width, let height = file.height else { return nil }
-            return "\(width)x\(height)"
-        }).count > 1 {
-            warnings.append("Multiple resolutions found.")
-        }
-        if module != .pamAudio, files.contains(where: { $0.qualityReasons.contains("LOW_RESOLUTION") }) {
-            warnings.append("Some files have low resolution.")
-        }
-        if totalSizeBytes >= 10 * 1024 * 1024 * 1024 || files.count >= 500 {
-            warnings.append("This batch is large and may take a while.")
-        }
-        return warnings
     }
 
     nonisolated private func roundMostCommon(_ values: [Double]) -> Double? {
@@ -881,11 +514,4 @@ final class ProjectScanService: ProjectScanServicing {
     nonisolated private func sortedUniqueInts(_ values: [Int]) -> [Int] {
         Array(Set(values)).sorted()
     }
-}
-
-nonisolated private struct AudioLevelMetrics: Sendable {
-    let peak: Double
-    let rms: Double
-    let clippingPercent: Double
-    let nearZeroPercent: Double
 }

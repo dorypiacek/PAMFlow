@@ -28,7 +28,7 @@ protocol PAMGuardSetupViewModelType: AnyObject {
     /// Creates or updates the PAMGuard folder and template for the selected detection target.
     func prepare(project: Project, modelContext: ModelContext)
     /// Marks setup complete and opens the module's next workflow step.
-    func continueWorkflow(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating)
+    func continueWorkflow(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling)
     /// Reveals the generated PAMGuard template in Finder.
     func revealTemplateInFinder(_ templateURL: URL, project: Project)
     /// Builds an action that reveals the generated PAMGuard folder when preparation has succeeded.
@@ -37,7 +37,7 @@ protocol PAMGuardSetupViewModelType: AnyObject {
     func restorePreparedResultIfNeeded(modelContext: ModelContext)
 }
 
-/// View model for the PAM module's PAMGuard setup step.
+/// View model for the audio module's PAMGuard setup step.
 @Observable
 @MainActor
 final class PAMGuardSetupViewModel: PAMGuardSetupViewModelType {
@@ -97,11 +97,11 @@ final class PAMGuardSetupViewModel: PAMGuardSetupViewModelType {
     }
 
     /// Persists the workflow transition to the waiting/import phase.
-    func continueWorkflow(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating) {
+    func continueWorkflow(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling) {
         project.workflowStatus = .processingProjectCreated
         project.lastOpenedAt = .now
         try? modelContext.save()
-        appCoordinator.goToNextStep(for: project)
+        workflowActions.goToNextStep(for: project)
     }
 
     /// Reveals a generated PAMGuard template while respecting project folder security scope.

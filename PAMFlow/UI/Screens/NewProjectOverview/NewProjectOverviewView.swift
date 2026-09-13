@@ -21,10 +21,10 @@ struct NewProjectOverviewView: View {
 
     init(
         projectID: UUID,
-        projectScanService: ProjectScanServicing
+        viewModel: NewProjectOverviewViewModel
     ) {
         self.projectID = projectID
-        _viewModel = State(initialValue: NewProjectOverviewViewModel(projectScanService: projectScanService))
+        _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -257,10 +257,6 @@ private extension NewProjectOverviewView {
     func load() {
         guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else { return }
         viewModel.load(project: project)
-        viewModel.prewarmInitialAudioPreviews(
-            project: project,
-            audioPreviewCacheService: appCoordinator.dependencies.audioPreviewCacheService
-        )
     }
 
     @MainActor

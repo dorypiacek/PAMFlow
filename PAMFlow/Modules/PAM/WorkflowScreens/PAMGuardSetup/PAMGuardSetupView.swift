@@ -11,22 +11,24 @@ import SwiftUI
 /// Renders PAMGuard setup controls while its ViewModel prepares the external project package.
 struct PAMGuardSetupView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
     let projectScanService: ProjectScanServicing
     let preparationService: PAMGuardPreparationServicing
+    let workflowActions: WorkflowActionHandling
 
     @State private var viewModel: PAMGuardSetupViewModel
 
     init(
         projectID: UUID,
         projectScanService: ProjectScanServicing,
-        preparationService: PAMGuardPreparationServicing
+        preparationService: PAMGuardPreparationServicing,
+        workflowActions: WorkflowActionHandling
     ) {
         self.projectID = projectID
         self.projectScanService = projectScanService
         self.preparationService = preparationService
+        self.workflowActions = workflowActions
         _viewModel = State(
             initialValue: PAMGuardSetupViewModel(
                 projectID: projectID,
@@ -136,12 +138,12 @@ struct PAMGuardSetupView: View {
 
             HStack(spacing: Spacing.medium) {
                 Button(Strings.PAMGuardSetup.backButton) {
-                    appCoordinator.goToPreviousStep(for: project)
+                    workflowActions.goToPreviousStep(for: project)
                 }
                 .buttonStyle(.secondaryAction)
 
                 Button(Strings.PAMGuardSetup.continueButton) {
-                    viewModel.continueWorkflow(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
+                    viewModel.continueWorkflow(project: project, modelContext: modelContext, workflowActions: workflowActions)
                 }
                 .buttonStyle(.primaryAction)
                 .disabled(viewModel.result == nil)

@@ -15,15 +15,25 @@ import SwiftUI
 /// overview.
 struct SharkTrackProcessingView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
+    let workflowActions: WorkflowActionHandling
 
     @State private var viewModel: SharkTrackProcessingViewModel
 
-    init(projectID: UUID) {
+    init(
+        projectID: UUID,
+        workflowActions: WorkflowActionHandling,
+        sharkTrackService: SharkTrackServicing,
+        projectScanService: ProjectScanServicing
+    ) {
         self.projectID = projectID
-        _viewModel = State(initialValue: SharkTrackProcessingViewModel(projectID: projectID))
+        self.workflowActions = workflowActions
+        _viewModel = State(initialValue: SharkTrackProcessingViewModel(
+            projectID: projectID,
+            sharkTrackService: sharkTrackService,
+            projectScanService: projectScanService
+        ))
     }
 
     var body: some View {
@@ -43,7 +53,7 @@ struct SharkTrackProcessingView: View {
                         if viewModel.errorMessage != nil {
                             Button(Strings.SharkTrackProcessing.retryButton) {
                                 Task {
-                                    await viewModel.processProject(modelContext: modelContext, appCoordinator: appCoordinator)
+                                    await viewModel.processProject(modelContext: modelContext, workflowActions: workflowActions)
                                 }
                             }
                             .buttonStyle(.primaryAction)
@@ -57,7 +67,7 @@ struct SharkTrackProcessingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
         .task {
-            await viewModel.processProject(modelContext: modelContext, appCoordinator: appCoordinator)
+            await viewModel.processProject(modelContext: modelContext, workflowActions: workflowActions)
         }
         .task(id: viewModel.isProcessing) {
             guard viewModel.isProcessing else { return }

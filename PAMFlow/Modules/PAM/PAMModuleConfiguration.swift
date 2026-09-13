@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Module configuration for passive acoustic monitoring projects.
+/// Configuration for audio projects handled by this module.
 @MainActor
 enum PAMModuleConfiguration {
     static let details = ModuleDetails(
@@ -17,7 +17,8 @@ enum PAMModuleConfiguration {
         iconName: Icons.audio,
         projectNamePrefix: "PAM",
         libraryFolderName: Strings.WorkflowModule.audioFolder,
-        supportedFileExtensions: MediaFileExtensions.wavAudio,
+        supportedFileExtensions: PAMMediaFileExtensions.audio,
+        previewableAudioExtensions: PAMMediaFileExtensions.previewAudio,
         generatedArtifactFolderNames: files.generatedArtifactFolderNames
     )
 
@@ -63,7 +64,7 @@ enum PAMModuleConfiguration {
     }
 }
 
-/// Metadata identifiers owned by the PAM module.
+/// Metadata identifiers owned by the audio module.
 enum PAMMetadataFieldID {
     static let opcode = "opcode"
     static let date = "date"
@@ -75,7 +76,7 @@ enum PAMMetadataFieldID {
     static let requiredFields = [opcode, date, dateRetrieved, location, depth]
 }
 
-/// PAM-specific project folder and file names.
+/// Audio module project folder and file names.
 enum PAMProjectFileNames {
     nonisolated static let pamguardDirectory = "pamguard"
     nonisolated static let pamguardDetectionsDirectory = "detections"
@@ -84,13 +85,15 @@ enum PAMProjectFileNames {
     nonisolated static let pamguardDetectionPreviewDirectory = "pamguard_detection_previews"
 }
 
-/// PAM-specific file extensions.
+/// Audio module file extensions.
 enum PAMMediaFileExtensions {
+    nonisolated static let audio: Set<String> = ["wav", "wave"]
+    nonisolated static let previewAudio: Set<String> = ["wav", "wave", "aif", "aiff", "flac", "mp3", "m4a", "caf"]
     nonisolated static let pamguardDatabase: Set<String> = ["sqlite", "sqlite3", "db"]
     nonisolated static let pamguardBinary: Set<String> = ["pgdf", "pgnf", "pgdx"]
 }
 
-/// PAMGuard preview naming conventions used by the PAM module.
+/// PAMGuard preview naming conventions used by the audio module.
 enum PAMGuardPreview {
     nonisolated static let filePrefix = "event"
     nonisolated static let fileExtension = "png"

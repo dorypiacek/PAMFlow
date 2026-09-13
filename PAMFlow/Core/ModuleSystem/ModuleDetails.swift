@@ -16,6 +16,7 @@ struct ModuleDetails: Hashable, Sendable {
     let projectNamePrefix: String
     let libraryFolderName: String
     let supportedFileExtensions: Set<String>
+    let previewableAudioExtensions: Set<String>
     let generatedArtifactFolderNames: Set<String>
 
     init(
@@ -26,6 +27,7 @@ struct ModuleDetails: Hashable, Sendable {
         projectNamePrefix: String,
         libraryFolderName: String,
         supportedFileExtensions: Set<String>,
+        previewableAudioExtensions: Set<String> = [],
         generatedArtifactFolderNames: Set<String> = []
     ) {
         self.id = id
@@ -35,6 +37,7 @@ struct ModuleDetails: Hashable, Sendable {
         self.projectNamePrefix = projectNamePrefix
         self.libraryFolderName = libraryFolderName
         self.supportedFileExtensions = supportedFileExtensions
+        self.previewableAudioExtensions = previewableAudioExtensions
         self.generatedArtifactFolderNames = generatedArtifactFolderNames
     }
 }

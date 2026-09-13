@@ -11,14 +11,15 @@ import SwiftUI
 /// Renders the waiting state while the user runs the generated PAMGuard template.
 struct PAMGuardWaitingView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
+    let workflowActions: WorkflowActionHandling
 
     @State private var viewModel: PAMGuardWaitingViewModel
 
-    init(projectID: UUID) {
+    init(projectID: UUID, workflowActions: WorkflowActionHandling) {
         self.projectID = projectID
+        self.workflowActions = workflowActions
         _viewModel = State(initialValue: PAMGuardWaitingViewModel(projectID: projectID))
     }
 
@@ -49,7 +50,7 @@ struct PAMGuardWaitingView: View {
                                 .buttonStyle(.secondaryAction)
 
                                 Button(Strings.PAMGuardSetup.confirmRunFinished) {
-                                    viewModel.confirmRunFinished(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
+                                    viewModel.confirmRunFinished(project: project, modelContext: modelContext, workflowActions: workflowActions)
                                 }
                                 .buttonStyle(.primaryAction)
                             }

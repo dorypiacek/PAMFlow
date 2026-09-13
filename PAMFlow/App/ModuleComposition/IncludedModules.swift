@@ -9,24 +9,30 @@ import Foundation
 /// Build-composition entry point for feature modules included in this app.
 @MainActor
 enum IncludedModules {
+    /// Builds the catalog of feature modules compiled into this app target.
     static func makeCatalog(provider: IncludedModuleProviding? = nil) -> ModuleCatalog {
         ModuleCatalog(modules: (provider ?? StaticIncludedModuleProvider()).modules)
     }
 }
 
+/// Supplies feature modules for an app build configuration.
 @MainActor
 protocol IncludedModuleProviding {
+    /// Workflow modules available in this build.
     var modules: [FeatureModule] { get }
 }
 
+/// Static build-time module provider used by the app target.
 @MainActor
 struct StaticIncludedModuleProvider: IncludedModuleProviding {
     private let includedProjectTypes: [IncludedProjectType]
 
+    /// Creates a provider for the selected project types.
     init(includedProjectTypes: [IncludedProjectType] = IncludedProjectType.allCases) {
         self.includedProjectTypes = includedProjectTypes
     }
 
+    /// Feature modules mapped from the selected project types.
     var modules: [FeatureModule] {
         includedProjectTypes.map(makeModule)
     }
@@ -41,8 +47,10 @@ struct StaticIncludedModuleProvider: IncludedModuleProviding {
             BRUVWorkflowModule(projectType: .ruv)
         }
     }
+
 }
 
+/// Project types compiled into the app target.
 enum IncludedProjectType: CaseIterable {
     case pam
     case bruv

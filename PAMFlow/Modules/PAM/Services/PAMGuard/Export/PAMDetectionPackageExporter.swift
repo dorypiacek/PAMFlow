@@ -447,7 +447,7 @@ struct PAMDetectionPackageExporter {
             .compactMap { $0 as? URL }
             .filter { url in
                 ((try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true) &&
-                    MediaFileExtensions.wavAudio.contains(url.pathExtension.lowercased())
+                    PAMMediaFileExtensions.audio.contains(url.pathExtension.lowercased())
             } ?? [])
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         return urls.map { url in

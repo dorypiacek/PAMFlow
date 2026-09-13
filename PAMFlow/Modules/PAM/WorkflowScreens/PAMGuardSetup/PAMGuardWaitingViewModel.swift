@@ -18,7 +18,7 @@ protocol PAMGuardWaitingViewModelType: AnyObject {
     /// Fetches the project associated with this waiting screen.
     func fetchProject(modelContext: ModelContext) -> Project?
     /// Marks the manual PAMGuard run as complete and advances to import processing.
-    func confirmRunFinished(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating)
+    func confirmRunFinished(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling)
     /// Builds an action that reveals the PAMGuard project folder when available.
     func pamguardFolderRevealAction(modelContext: ModelContext) -> (() -> Void)?
 }
@@ -39,11 +39,11 @@ final class PAMGuardWaitingViewModel: PAMGuardWaitingViewModelType {
     }
 
     /// Persists the workflow transition after the user confirms the PAMGuard run is finished.
-    func confirmRunFinished(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating) {
+    func confirmRunFinished(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling) {
         project.workflowStatus = .processingRunImported
         project.lastOpenedAt = .now
         try? modelContext.save()
-        appCoordinator.goToNextStep(for: project)
+        workflowActions.goToNextStep(for: project)
     }
 
     /// Returns a Finder reveal action for the generated PAMGuard folder.

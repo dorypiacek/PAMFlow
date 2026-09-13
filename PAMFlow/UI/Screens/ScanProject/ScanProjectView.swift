@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-/// Renders scan progress for a project while `ScanProjectViewModel` owns scanning and cleanup.
+/// Renders scan progress for a project while the injected ViewModel owns scanning and cleanup.
 struct ScanProjectView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppCoordinator.self) private var appCoordinator
@@ -17,9 +17,18 @@ struct ScanProjectView: View {
 
     @State private var viewModel: ScanProjectViewModel
 
-    init(projectID: UUID) {
+    /// Creates a scan screen for a project using module-provided scan behavior.
+    init(
+        projectID: UUID,
+        supportedFileExtensions: Set<String>,
+        scanAnalyzer: ProjectScanAnalyzing
+    ) {
         self.projectID = projectID
-        _viewModel = State(initialValue: ScanProjectViewModel(projectID: projectID))
+        _viewModel = State(initialValue: ScanProjectViewModel(
+            projectID: projectID,
+            supportedFileExtensions: supportedFileExtensions,
+            scanAnalyzer: scanAnalyzer
+        ))
     }
 
     var body: some View {

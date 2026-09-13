@@ -22,14 +22,14 @@ protocol PAMGuardProcessingViewModelType: AnyObject {
     var hasStarted: Bool { get }
 
     /// Starts import when it has not already been started.
-    func startIfNeeded(modelContext: ModelContext, appCoordinator: AppCoordinating)
+    func startIfNeeded(modelContext: ModelContext, workflowActions: WorkflowActionHandling)
     /// Imports PAMGuard detections, stores the updated scan summary, and advances the workflow.
-    func start(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating)
+    func start(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling)
     /// Fetches the project associated with this processing screen.
     func fetchProject(modelContext: ModelContext) -> Project?
 }
 
-/// View model for the PAM module's detection-import processing screen.
+/// View model for the audio module's detection-import processing screen.
 @Observable
 @MainActor
 final class PAMGuardProcessingViewModel: PAMGuardProcessingViewModelType {
@@ -60,13 +60,13 @@ final class PAMGuardProcessingViewModel: PAMGuardProcessingViewModelType {
         self.processingService = processingService
     }
 
-    func startIfNeeded(modelContext: ModelContext, appCoordinator: AppCoordinating) {
+    func startIfNeeded(modelContext: ModelContext, workflowActions: WorkflowActionHandling) {
         guard !hasStarted, let project = fetchProject(modelContext: modelContext) else { return }
         hasStarted = true
-        start(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
+        start(project: project, modelContext: modelContext, workflowActions: workflowActions)
     }
 
-    func start(project: Project, modelContext: ModelContext, appCoordinator: AppCoordinating) {
+    func start(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling) {
         errorMessage = nil
         progress = nil
         message = Strings.PAMGuardProcessing.starting
@@ -85,7 +85,7 @@ final class PAMGuardProcessingViewModel: PAMGuardProcessingViewModelType {
                 project.lastOpenedAt = .now
                 try project.storeScanSummary(summary)
                 try modelContext.save()
-                appCoordinator.goToNextStep(for: project)
+                workflowActions.goToNextStep(for: project)
             } catch {
                 errorMessage = error.localizedDescription
                 message = Strings.PAMGuardProcessing.failed

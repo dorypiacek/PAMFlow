@@ -140,7 +140,7 @@ nonisolated struct SharkTrackMediaDiscovery: Sendable {
         var fileExtensions: Set<String> {
             switch self {
             case .video:
-                MediaFileExtensions.video
+                BRUVMediaFileExtensions.video
             case .image:
                 BRUVMediaFileExtensions.sharkTrackImage
             }

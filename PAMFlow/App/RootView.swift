@@ -32,22 +32,10 @@ struct RootView: View {
         case .dataTypeSelection:
             DataTypeSelectionView()
 
-        case .moduleFlow(moduleID: let moduleID):
-            if let module = appCoordinator.moduleCatalog.module(for: moduleID) {
-                module.makeCoordinator(
-                    context: ModuleContext(dependencies: appCoordinator.dependencies, appCoordinator: appCoordinator)
-                )
-                .startProject()
-            } else {
-                ProjectSelectionView()
-            }
-
-        case .moduleScreen(let screen):
-            if let module = appCoordinator.moduleCatalog.module(for: screen.moduleID) {
-                module.makeCoordinator(
-                    context: ModuleContext(dependencies: appCoordinator.dependencies, appCoordinator: appCoordinator)
-                )
-                .makeScreen(for: screen)
+        case .moduleWorkflow:
+            let _ = appCoordinator.workflowRevision
+            if let coordinator = appCoordinator.activeModuleCoordinator {
+                coordinator.currentScreen
             } else {
                 ProjectSelectionView()
             }

@@ -95,8 +95,6 @@ protocol NewProjectOverviewViewModelType: AnyObject {
     func removeAuditProgressAndGoBackToScan(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
     /// Creates valid decisions for every scanned file and advances the workflow.
     func skipManualAudit(project: Project, modelContext: ModelContext, coordinator: AppCoordinating)
-    /// Warms initial audio previews so the first manual-audit samples open quickly.
-    func prewarmInitialAudioPreviews(project: Project, audioPreviewCacheService: AudioPreviewCacheServicing)
     /// Marks SharkTrack preparation as started.
     func beginSharkTrackPreparation()
     /// Marks SharkTrack preparation as successful.
@@ -118,7 +116,7 @@ protocol NewProjectOverviewViewModelType: AnyObject {
 /// View model that turns scan results into project overview state and owns reset/skip actions.
 @Observable
 @MainActor
-final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
+class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     /// Loaded scan summary for the project.
     var summary: ProjectScanSummary?
     /// User-facing loading, reset, or workflow error.
@@ -133,7 +131,7 @@ final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     var sharkTrackErrorMessage: String?
 
     /// Service used to load persisted scan summaries.
-    private let projectScanService: ProjectScanServicing
+    let projectScanService: ProjectScanServicing
 
     /// Creates a ViewModel that loads summaries and derives presentation state.
     init(projectScanService: ProjectScanServicing) {
@@ -261,24 +259,6 @@ final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         continueAfterSkippingManualAudit(for: project, coordinator: coordinator)
     }
 
-    func prewarmInitialAudioPreviews(project: Project, audioPreviewCacheService: AudioPreviewCacheServicing) {
-        guard WorkflowModule.module(for: project.moduleID) == .pamAudio,
-              let summary,
-              let inputFolderURL = project.inputFolderURL else {
-            return
-        }
-
-        for file in summary.files.prefix(Metrics.Cache.manualAuditPrewarmCount + 1) where isSupportedAudioPath(file.relativePath) {
-            let url = inputFolderURL.appendingPathComponent(file.relativePath)
-            audioPreviewCacheService.preheat(
-                url: url,
-                securityScopedURL: inputFolderURL,
-                clipStartSeconds: nil,
-                clipDurationSeconds: nil
-            )
-        }
-    }
-
     /// Marks SharkTrack preparation as started.
     func beginSharkTrackPreparation() {
         didStartSharkTrack = true
@@ -383,10 +363,6 @@ final class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         for decision in decisions {
             modelContext.delete(decision)
         }
-    }
-
-    private func isSupportedAudioPath(_ path: String) -> Bool {
-        MediaFileExtensions.previewAudio.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
     }
 
     private func detailMetrics(

@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Module configuration for BRUV projects, including the related RUV project type.
+/// Configuration for visual projects, including BRUV video and RUV image workflows.
 @MainActor
 enum BRUVModuleConfiguration {
     static let files = ModuleFileConfiguration(
@@ -28,7 +28,7 @@ enum BRUVModuleConfiguration {
                 iconName: Icons.video,
                 projectNamePrefix: "BRUV",
                 libraryFolderName: Strings.WorkflowModule.bruvVideoFolder,
-                supportedFileExtensions: MediaFileExtensions.video,
+                supportedFileExtensions: BRUVMediaFileExtensions.video,
                 generatedArtifactFolderNames: files.generatedArtifactFolderNames
             )
         case .ruv:
@@ -39,7 +39,7 @@ enum BRUVModuleConfiguration {
                 iconName: Icons.image,
                 projectNamePrefix: "RUV",
                 libraryFolderName: Strings.WorkflowModule.ruvImagesFolder,
-                supportedFileExtensions: MediaFileExtensions.image,
+                supportedFileExtensions: BRUVMediaFileExtensions.image,
                 generatedArtifactFolderNames: files.generatedArtifactFolderNames
             )
         }
@@ -80,13 +80,13 @@ enum BRUVModuleConfiguration {
     }
 }
 
-/// Visual project types served by the BRUV module implementation.
-enum BRUVProjectType {
+/// Visual project types served by this module.
+enum BRUVProjectType: Sendable {
     case bruv
     case ruv
 }
 
-/// Metadata identifiers owned by the BRUV module.
+/// Metadata identifiers owned by the visual module.
 enum BRUVMetadataFieldID {
     static let opcode = "opcode"
     static let date = "date"
@@ -98,14 +98,16 @@ enum BRUVMetadataFieldID {
     static let requiredFields = [opcode, date, location, depth]
 }
 
-/// BRUV module project folder and file names.
+/// Visual module project folder and file names.
 enum BRUVProjectFileNames {
     nonisolated static let detectionsDirectory = "detections"
     nonisolated static let sharkTrackInternalDirectory = "sharktrack_internal"
     nonisolated static let sharkTrackManifest = "sharktrack_manifest.json"
 }
 
-/// BRUV module file extensions.
+/// Visual module file extensions.
 enum BRUVMediaFileExtensions {
+    nonisolated static let video: Set<String> = ["mp4", "mov", "m4v", "avi"]
+    nonisolated static let image: Set<String> = ["jpg", "jpeg", "png", "tif", "tiff", "heic", "heif"]
     nonisolated static let sharkTrackImage: Set<String> = ["jpg", "jpeg", "png", "heic", "tif", "tiff"]
 }

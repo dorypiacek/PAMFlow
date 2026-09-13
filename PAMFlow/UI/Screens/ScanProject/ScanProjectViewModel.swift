@@ -50,15 +50,25 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
 
     /// Identifier of the project being scanned.
     private let projectID: UUID
+    /// File extensions the owning module wants Core to inventory.
+    private let supportedFileExtensions: Set<String>
+    /// Module-specific analyzer applied after Core has inventoried source files.
+    private let scanAnalyzer: ProjectScanAnalyzing
     /// Prevents scan completion callbacks from mutating a project that the user discarded.
     private var didDiscardDuringScan = false
 
-    /// Creates scan state for a persisted project identifier.
-    init(projectID: UUID) {
+    /// Creates scan state for a persisted project and the owning module's scan behavior.
+    init(
+        projectID: UUID,
+        supportedFileExtensions: Set<String>,
+        scanAnalyzer: ProjectScanAnalyzing
+    ) {
         self.projectID = projectID
+        self.supportedFileExtensions = supportedFileExtensions
+        self.scanAnalyzer = scanAnalyzer
     }
 
-    /// Runs the technical project scan, persists the resulting summary, and opens the next workflow step.
+    /// Runs Core file discovery, applies module analysis, persists the summary, and opens the next workflow step.
     func scanProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async {
         AppLog.info("ScanProjectView.task fired for projectID=\(projectID.uuidString)")
         guard !isScanning, let project = fetchProject(modelContext: modelContext) else {
@@ -77,8 +87,11 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             project.lastOpenedAt = .now
             try modelContext.save()
 
-            AppLog.info("ScanProjectView calling ProjectScanService.scan")
-            let summary = try await appCoordinator.dependencies.projectScanService.scan(project: project) { progress in
+            AppLog.info("ScanProjectView calling ProjectScanService.scanInventory")
+            let inventory = try await appCoordinator.dependencies.projectScanService.scanInventory(
+                project: project,
+                supportedFileExtensions: supportedFileExtensions
+            ) { progress in
                 Task { @MainActor in
                     guard !self.didDiscardDuringScan else { return }
                     self.scanMessage = progress.message
@@ -86,6 +99,14 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
                     self.progressFraction = progress.fractionCompleted
                 }
             }
+            let analyzedFiles = await analyzeFiles(inventory.files)
+            let totalSizeBytes = analyzedFiles.reduce(0) { $0 + $1.sizeBytes }
+            let warnings = scanAnalyzer.warnings(files: analyzedFiles, totalSizeBytes: totalSizeBytes)
+            let summary = try appCoordinator.dependencies.projectScanService.makeSummary(
+                inventory: inventory,
+                analyzedFiles: analyzedFiles,
+                warnings: warnings
+            )
             guard !didDiscardDuringScan else {
                 AppLog.info("ScanProjectView ignored scan completion because project was discarded")
                 isScanning = false
@@ -140,5 +161,15 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             }
         )
         return try? modelContext.fetch(descriptor).first
+    }
+
+    /// Applies the module analyzer to every inventoried file in scan order.
+    private func analyzeFiles(_ files: [ProjectScanFileInfo]) async -> [ProjectScanFile] {
+        var analyzedFiles: [ProjectScanFile] = []
+        analyzedFiles.reserveCapacity(files.count)
+        for file in files {
+            analyzedFiles.append(await scanAnalyzer.analyzeFile(file))
+        }
+        return analyzedFiles
     }
 }

@@ -26,7 +26,6 @@ protocol AppCoordinating: AnyObject {
     func selectTheme(_ theme: AppTheme)
     func openDataTypeSelection()
     func openModule(moduleID: ModuleID)
-    func openModuleScreen(_ route: ModuleScreenRoute)
     func openProjectSelection()
     func goHome()
     func goBack()
@@ -49,11 +48,13 @@ extension AppCoordinating {
 /// `AppCoordinator` intentionally keeps screen-specific state out of the global
 /// object. Feature screens own their local models and call these navigation
 /// methods after durable state has been saved.
-final class AppCoordinator: AppCoordinating {
+final class AppCoordinator: AppCoordinating, WorkflowActionHandling {
     var userProfile: UserProfile?
     var route: AppRoute
     var selectedTheme: AppTheme
     var settingsErrorMessage: String?
+    var activeModuleCoordinator: ModuleCoordinating?
+    var workflowRevision = 0
     #if DEBUG
     var simulateSharkTrackProcessing: Bool
     #endif
@@ -138,19 +139,40 @@ final class AppCoordinator: AppCoordinating {
     }
 
     func openModule(moduleID: ModuleID) {
-        route = .moduleFlow(moduleID: moduleID)
-    }
-
-    func openModuleScreen(_ screenRoute: ModuleScreenRoute) {
-        route = .moduleScreen(screenRoute)
+        guard let module = moduleCatalog.module(for: moduleID) else {
+            route = .projectSelection
+            return
+        }
+        let coordinator = module.makeCoordinator(
+            context: ModuleContext(dependencies: dependencies, workflowActions: self)
+        )
+        coordinator.startProject()
+        activeModuleCoordinator = coordinator
+        workflowRevision += 1
+        route = .moduleWorkflow
     }
 
     func openProjectSelection() {
+        activeModuleCoordinator = nil
+        workflowRevision += 1
         route = .projectSelection
     }
 
     func goHome() {
+        if route == .moduleWorkflow {
+            exitWorkflow()
+            return
+        }
+
+        activeModuleCoordinator = nil
+        workflowRevision += 1
         route = userProfile == nil ? .welcome : .projectSelection
+    }
+
+    func exitWorkflow() {
+        activeModuleCoordinator = nil
+        workflowRevision += 1
+        route = .projectSelection
     }
 
     func goBack() {
@@ -159,17 +181,9 @@ final class AppCoordinator: AppCoordinating {
             break
         case .dataTypeSelection:
             route = .projectSelection
-        case .moduleFlow:
-            route = .dataTypeSelection
-        case .moduleScreen(let screen):
-            guard let module = moduleCatalog.module(for: screen.moduleID) else {
-                route = .projectSelection
-                return
-            }
-            route = module.makeCoordinator(
-                context: ModuleContext(dependencies: dependencies, appCoordinator: self)
-            )
-            .previousRoute(for: screen)
+        case .moduleWorkflow:
+            activeModuleCoordinator?.goBack()
+            workflowRevision += 1
         }
     }
 
@@ -181,10 +195,14 @@ final class AppCoordinator: AppCoordinating {
             return
         }
 
-        module.makeCoordinator(
-            context: ModuleContext(dependencies: dependencies, appCoordinator: self)
-        )
-        .openNextStep(for: project, from: route, startAtLastReviewed: startAtLastReviewed)
+        if activeModuleCoordinator?.moduleID != module.details.id {
+            activeModuleCoordinator = module.makeCoordinator(
+                context: ModuleContext(dependencies: dependencies, workflowActions: self)
+            )
+            route = .moduleWorkflow
+        }
+        activeModuleCoordinator?.goToNextStep(for: project, startAtLastReviewed: startAtLastReviewed)
+        workflowRevision += 1
     }
 
     func goToPreviousStep(for project: Project) {
@@ -200,10 +218,13 @@ final class AppCoordinator: AppCoordinating {
             return
         }
 
-        module.makeCoordinator(
-            context: ModuleContext(dependencies: dependencies, appCoordinator: self)
+        let coordinator = module.makeCoordinator(
+            context: ModuleContext(dependencies: dependencies, workflowActions: self)
         )
-        .openReadOnlyProject(project)
+        coordinator.openReadOnlyProject(project)
+        activeModuleCoordinator = coordinator
+        workflowRevision += 1
+        route = .moduleWorkflow
     }
 
     func continueProject(_ project: Project) {
@@ -214,9 +235,12 @@ final class AppCoordinator: AppCoordinating {
             return
         }
 
-        module.makeCoordinator(
-            context: ModuleContext(dependencies: dependencies, appCoordinator: self)
+        let coordinator = module.makeCoordinator(
+            context: ModuleContext(dependencies: dependencies, workflowActions: self)
         )
-        .openLatestProject(project)
+        coordinator.resume(project: project)
+        activeModuleCoordinator = coordinator
+        workflowRevision += 1
+        route = .moduleWorkflow
     }
 }

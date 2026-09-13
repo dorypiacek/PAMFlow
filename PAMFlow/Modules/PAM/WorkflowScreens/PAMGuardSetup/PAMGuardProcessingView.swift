@@ -11,22 +11,24 @@ import SwiftUI
 /// Renders PAMGuard import progress while its ViewModel owns detection processing.
 struct PAMGuardProcessingView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
 
     let projectID: UUID
     let projectScanService: ProjectScanServicing
     let processingService: PAMGuardDetectionProcessingServicing
+    let workflowActions: WorkflowActionHandling
 
     @State private var viewModel: PAMGuardProcessingViewModel
 
     init(
         projectID: UUID,
         projectScanService: ProjectScanServicing,
-        processingService: PAMGuardDetectionProcessingServicing
+        processingService: PAMGuardDetectionProcessingServicing,
+        workflowActions: WorkflowActionHandling
     ) {
         self.projectID = projectID
         self.projectScanService = projectScanService
         self.processingService = processingService
+        self.workflowActions = workflowActions
         _viewModel = State(
             initialValue: PAMGuardProcessingViewModel(
                 projectID: projectID,
@@ -52,7 +54,7 @@ struct PAMGuardProcessingView: View {
                         if viewModel.errorMessage != nil {
                             if let project = viewModel.fetchProject(modelContext: modelContext) {
                                 Button(Strings.PAMGuardProcessing.retry) {
-                                    viewModel.start(project: project, modelContext: modelContext, appCoordinator: appCoordinator)
+                                    viewModel.start(project: project, modelContext: modelContext, workflowActions: workflowActions)
                                 }
                                 .buttonStyle(.primaryAction)
                             }
@@ -66,7 +68,7 @@ struct PAMGuardProcessingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
         .task {
-            viewModel.startIfNeeded(modelContext: modelContext, appCoordinator: appCoordinator)
+            viewModel.startIfNeeded(modelContext: modelContext, workflowActions: workflowActions)
         }
     }
 }
