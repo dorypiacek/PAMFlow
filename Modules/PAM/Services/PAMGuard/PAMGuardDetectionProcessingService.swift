@@ -6,6 +6,8 @@
 //
 
 import AppKit
+import UI
+import Core
 import AVFoundation
 import Foundation
 import SQLite3

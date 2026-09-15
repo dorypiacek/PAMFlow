@@ -6,82 +6,80 @@
 //
 
 import Foundation
+import Core
 
 /// Shared spacing scale for PAMFlow layouts.
-enum Spacing {
-    static let xSmall: CGFloat = 4
-    static let small: CGFloat = 8
-    static let medium: CGFloat = 16
-    static let large: CGFloat = 24
-    static let xLarge: CGFloat = 32
-    static let xxLarge: CGFloat = 48
+public enum Spacing {
+    public static let xSmall: CGFloat = 4
+    public static let small: CGFloat = 8
+    public static let medium: CGFloat = 16
+    public static let large: CGFloat = 24
+    public static let xLarge: CGFloat = 32
+    public static let xxLarge: CGFloat = 48
 }
 
 /// Shared sizing and opacity constants used by SwiftUI views.
 ///
 /// Views should add values here instead of hardcoding layout metrics inline.
-enum Metrics {
-    enum Layout {
-        static let topBarHeight: CGFloat = 52
-        static let compactContentWidth: CGFloat = 560
-        static let settingsWidth: CGFloat = 520
-        static let readableTextWidth: CGFloat = 640
-        static let regularContentWidth: CGFloat = 860
-        static let wideContentWidth: CGFloat = 1_400
-        static let loadingCardWidth: CGFloat = 760
-        static let loadingProgressWidth: CGFloat = 420
-        static let dataTypeButtonMinHeight: CGFloat = 220
-        static let dataTypeIconSize: CGFloat = 44
-        static let overviewModuleIconSize: CGFloat = 72
-        static let projectCardModuleIconSize: CGFloat = 56
-        static let projectSelectionCardHeight: CGFloat = 168
-        static let evidencePanelWidth: CGFloat = 260
-        static let auditOverviewMetricMinWidth: CGFloat = 260
-        static let highlightMetricMinWidth: CGFloat = 180
-        static let auditOverviewRowWidth: CGFloat = 420
-        static let auditOverviewCardHeight: CGFloat = 112
-        static let auditControlHeight: CGFloat = 24
-        static let buttonHeight: CGFloat = 32
-        static let textFieldHeight: CGFloat = 38
-        static let textFieldCornerRadius: CGFloat = 12
-        static let focusedBorderWidth: CGFloat = 2
-        static let actionButtonHeight: CGFloat = 40
-        static let decisionButtonMinWidth: CGFloat = 124
-        static let auditActionButtonMinWidth: CGFloat = 168
-        static let modalCloseButtonSize: CGFloat = 28
-        static let iconButtonSize: CGFloat = 32
-        static let audioButtonIconSize: CGFloat = 18
-        static let audioTransportButtonSize: CGFloat = 28
-        static let audioTimeLabelWidth: CGFloat = 44
-        static let chartAxisLeadingInset: CGFloat = 38
-        static let chartTrailingInset: CGFloat = 10
-        static let chartTopInset: CGFloat = 24
-        static let chartBottomInset: CGFloat = 34
-        static let chartMinimumHeight: CGFloat = 180
-        static let pickerWidth: CGFloat = 380
-        static let reasonSheetWidth: CGFloat = 520
-        static let speciesSearchResultsHeight: CGFloat = 220
-        static let speciesSearchFieldHeight: CGFloat = 22
-        static let speciesTrackColumnWidth: CGFloat = 72
-        static let speciesConfidenceColumnWidth: CGFloat = 72
-        static let speciesActionColumnWidth: CGFloat = 44
-        static let circularToolbarButtonSize: CGFloat = 36
-        static let glassCornerRadius: CGFloat = 14
-        static let toolbarCapsuleCornerRadius: CGFloat = 24
-        static let rowCornerRadius: CGFloat = 8
-        static let scrubberTrackHeight: CGFloat = 6
-        static let scrubberThumbSize: CGFloat = 16
-        static let hairline: CGFloat = 1
+public enum Metrics {
+    public enum Layout {
+        public static let topBarHeight: CGFloat = 52
+        public static let compactContentWidth: CGFloat = 560
+        public static let settingsWidth: CGFloat = 520
+        public static let readableTextWidth: CGFloat = 640
+        public static let regularContentWidth: CGFloat = 860
+        public static let wideContentWidth: CGFloat = 1_400
+        public static let loadingCardWidth: CGFloat = 760
+        public static let loadingProgressWidth: CGFloat = 420
+        public static let dataTypeButtonMinHeight: CGFloat = 220
+        public static let dataTypeIconSize: CGFloat = 44
+        public static let overviewModuleIconSize: CGFloat = 72
+        public static let projectCardModuleIconSize: CGFloat = 56
+        public static let projectSelectionCardHeight: CGFloat = 168
+        public static let evidencePanelWidth: CGFloat = 260
+        public static let auditOverviewMetricMinWidth: CGFloat = 260
+        public static let highlightMetricMinWidth: CGFloat = 180
+        public static let auditOverviewRowWidth: CGFloat = 420
+        public static let auditOverviewCardHeight: CGFloat = 112
+        public static let auditControlHeight: CGFloat = 24
+        public static let buttonHeight: CGFloat = 32
+        public static let textFieldHeight: CGFloat = 38
+        public static let textFieldCornerRadius: CGFloat = 12
+        public static let focusedBorderWidth: CGFloat = 2
+        public static let actionButtonHeight: CGFloat = 40
+        public static let decisionButtonMinWidth: CGFloat = 124
+        public static let auditActionButtonMinWidth: CGFloat = 168
+        public static let modalCloseButtonSize: CGFloat = 28
+        public static let iconButtonSize: CGFloat = 32
+        public static let chartAxisLeadingInset: CGFloat = 38
+        public static let chartTrailingInset: CGFloat = 10
+        public static let chartTopInset: CGFloat = 24
+        public static let chartBottomInset: CGFloat = 34
+        public static let chartMinimumHeight: CGFloat = 180
+        public static let pickerWidth: CGFloat = 380
+        public static let reasonSheetWidth: CGFloat = 520
+        public static let speciesSearchResultsHeight: CGFloat = 220
+        public static let speciesSearchFieldHeight: CGFloat = 22
+        public static let speciesTrackColumnWidth: CGFloat = 72
+        public static let speciesConfidenceColumnWidth: CGFloat = 72
+        public static let speciesActionColumnWidth: CGFloat = 44
+        public static let circularToolbarButtonSize: CGFloat = 36
+        public static let glassCornerRadius: CGFloat = 14
+        public static let toolbarCapsuleCornerRadius: CGFloat = 24
+        public static let rowCornerRadius: CGFloat = 8
+        public static let scrubberTrackHeight: CGFloat = 6
+        public static let scrubberThumbSize: CGFloat = 16
+        public static let hairline: CGFloat = 1
     }
 
-    enum Opacity {
-        static let subtleStroke = 0.22
-        static let hoverHighlight = 0.18
+    public enum Opacity {
+        public static let subtleStroke = 0.22
+        public static let hoverHighlight = 0.18
     }
 
-    enum Cache {
-        static let previewLimit = 3
-        static let projectSelectionPreheatLimit = 3
-        static let manualAuditPrewarmCount = 1
+    public enum Cache {
+        public static let previewLimit = 3
+        public static let projectSelectionPreheatLimit = 3
+        public static let manualAuditPrewarmCount = 1
     }
 }

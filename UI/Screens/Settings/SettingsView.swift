@@ -6,11 +6,19 @@
 //
 
 import AppKit
+import Core
 import SwiftUI
 
 /// Preferences panel for appearance, feedback, and logout.
-struct SettingsView: View {
-    @Environment(AppCoordinator.self) private var appCoordinator
+public struct SettingsView: View {
+    @Environment(\.appCoordinator) private var appCoordinator
+
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
     @Environment(\.dismiss) private var dismiss
     @State private var feedbackEmail = ""
     @State private var feedbackSubject = ""
@@ -19,7 +27,7 @@ struct SettingsView: View {
     @State private var feedbackStatus: String?
     @State private var isShowingFeedbackPage = false
 
-    var body: some View {
+    public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.large) {
                 if isShowingFeedbackPage {
@@ -58,7 +66,7 @@ struct SettingsView: View {
 
                 HStack {
                     Button(Strings.Settings.logOutButton, role: .destructive) {
-                        appCoordinator.signOut()
+                        coordinator.signOut()
                         dismiss()
                     }
                     .buttonStyle(.secondaryAction)
@@ -166,7 +174,7 @@ struct SettingsView: View {
                     Button {
                         feedbackAttachments.removeAll { $0 == url }
                     } label: {
-                        Image(systemName: "xmark")
+                        Image(systemName: Icons.close)
                     }
                     .buttonStyle(.iconAction)
                 }
@@ -189,8 +197,8 @@ struct SettingsView: View {
 
     private var themeBinding: Binding<AppTheme> {
         Binding(
-            get: { appCoordinator.selectedTheme },
-            set: { appCoordinator.selectTheme($0) }
+            get: { coordinator.selectedTheme },
+            set: { coordinator.selectTheme($0) }
         )
     }
 
@@ -288,7 +296,7 @@ struct SettingsView: View {
 }
 
 private enum FeedbackRoute {
-    static var recipient: String {
+    public static var recipient: String {
         ["dory", "piacek"].joined(separator: ".") + "@" + ["icloud", "com"].joined(separator: ".")
     }
 }

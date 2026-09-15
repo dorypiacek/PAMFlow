@@ -6,20 +6,25 @@
 //
 
 import SwiftUI
+import Core
 
 /// Defines the two shared capsule button treatments used across PAMFlow.
-struct AppButtonStyle: ButtonStyle {
-    enum Role {
+public struct AppButtonStyle: ButtonStyle {
+    public enum Role {
         case primary
         case secondary
         case prominentSecondary
     }
 
-    let role: Role
+    public let role: Role
 
     @Environment(\.isEnabled) private var isEnabled
 
-    func makeBody(configuration: Configuration) -> some View {
+    public init(role: Role) {
+        self.role = role
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
             .lineLimit(1)
@@ -75,12 +80,12 @@ struct AppButtonStyle: ButtonStyle {
 }
 
 /// Shared circular treatment for icon-only buttons.
-struct IconButtonStyle: ButtonStyle {
-    let size: CGFloat
+public struct IconButtonStyle: ButtonStyle {
+    public let size: CGFloat
 
     @Environment(\.isEnabled) private var isEnabled
 
-    func makeBody(configuration: Configuration) -> some View {
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: size * 0.4, weight: .regular))
             .foregroundStyle(.primary)
@@ -105,29 +110,29 @@ struct IconButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == AppButtonStyle {
     /// Filled, tint-colored style for primary actions and confirmations.
-    static var primaryAction: AppButtonStyle {
+    public static var primaryAction: AppButtonStyle {
         AppButtonStyle(role: .primary)
     }
 
     /// Neutral glass style for secondary actions.
-    static var secondaryAction: AppButtonStyle {
+    public static var secondaryAction: AppButtonStyle {
         AppButtonStyle(role: .secondary)
     }
 
     /// Secondary style with a tint-colored border for selected or emphasized secondary actions.
-    static var prominentSecondaryAction: AppButtonStyle {
+    public static var prominentSecondaryAction: AppButtonStyle {
         AppButtonStyle(role: .prominentSecondary)
     }
 }
 
 extension ButtonStyle where Self == IconButtonStyle {
     /// Circular style for icon-only controls.
-    static var iconAction: IconButtonStyle {
+    public static var iconAction: IconButtonStyle {
         IconButtonStyle(size: Metrics.Layout.iconButtonSize)
     }
 
     /// Larger circular style for top-bar icon controls.
-    static var topBarIconAction: IconButtonStyle {
+    public static var topBarIconAction: IconButtonStyle {
         IconButtonStyle(size: Metrics.Layout.buttonHeight)
     }
 }

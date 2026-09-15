@@ -6,12 +6,16 @@
 //
 
 import Foundation
+import UI
+import Core
 import SwiftUI
 
 /// Audio project overview behavior layered on top of the shared overview ViewModel.
 @Observable
 @MainActor
 final class PAMProjectOverviewViewModel: NewProjectOverviewViewModel {
+    private static let preheatedPreviewCount = 5
+
     /// Service used to prepare cached audio snippets for manual audit.
     private let audioPreviewCacheService: AudioPreviewCacheServicing
 
@@ -41,7 +45,7 @@ final class PAMProjectOverviewViewModel: NewProjectOverviewViewModel {
         }
 
         let previewableExtensions = PAMMediaFileExtensions.previewAudio
-        for file in summary.files.prefix(Metrics.Cache.manualAuditPrewarmCount + 1)
+        for file in summary.files.prefix(Self.preheatedPreviewCount)
             where previewableExtensions.contains(URL(fileURLWithPath: file.relativePath).pathExtension.lowercased()) {
             audioPreviewCacheService.preheat(
                 url: inputFolderURL.appendingPathComponent(file.relativePath),
@@ -60,7 +64,7 @@ final class PAMProjectOverviewViewModel: NewProjectOverviewViewModel {
         var metrics = super.highlightMetrics(summary: summary, project: project, readiness: readiness)
         metrics.insert(
             HighlightMetric(
-                Strings.NewProjectOverview.sampleRates,
+                PAMStrings.Overview.sampleRates,
                 formattedInts(summary.sampleRatesHz, suffix: "Hz")
             ),
             at: min(1, metrics.count)
@@ -92,12 +96,12 @@ final class PAMProjectOverviewViewModel: NewProjectOverviewViewModel {
         metrics.insert(contentsOf: [
             NewProjectOverviewMetric(title: Strings.NewProjectOverview.durationRange, value: durationRange(summary)),
             NewProjectOverviewMetric(
-                title: Strings.NewProjectOverview.sampleRates,
+                title: PAMStrings.Overview.sampleRates,
                 value: formattedInts(summary.sampleRatesHz, suffix: "Hz")
             ),
             NewProjectOverviewMetric(title: Strings.NewProjectOverview.channels, value: formattedInts(summary.channelCounts)),
             NewProjectOverviewMetric(
-                title: Strings.NewProjectOverview.bitDepths,
+                title: PAMStrings.Overview.bitDepths,
                 value: formattedInts(summary.bitDepths, suffix: "bit")
             ),
             NewProjectOverviewMetric(title: Strings.NewProjectOverview.manualAuditProgress, value: manualAuditProgress)

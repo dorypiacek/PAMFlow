@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Core
 import Observation
 import AppKit
 import SwiftData
@@ -62,9 +63,9 @@ protocol ProjectSetupViewModelType: AnyObject {
 /// Base ViewModel for module-configurable project setup.
 @Observable
 @MainActor
-class BaseProjectSetupViewModel: ProjectSetupViewModelType {
+public class BaseProjectSetupViewModel: ProjectSetupViewModelType {
     /// Module-specific setup rules, metadata fields, and project naming.
-    let configuration: ProjectSetupConfiguration
+    public let configuration: ProjectSetupConfiguration
 
     /// Selected raw input folder or file set.
     var selectedInputSource: ProjectInputSourceSelection?
@@ -92,7 +93,7 @@ class BaseProjectSetupViewModel: ProjectSetupViewModelType {
     /// Service that presents input and destination selection UI.
     private let fileSelectionService: FileSelecting
 
-    init(
+    public init(
         configuration: ProjectSetupConfiguration,
         projectFileService: ProjectFileServicing,
         fileSelectionService: FileSelecting
@@ -162,7 +163,8 @@ class BaseProjectSetupViewModel: ProjectSetupViewModelType {
     func selectInputSource() {
         guard let selection = fileSelectionService.selectInputSource(
             title: Strings.ProjectSetup.inputPanelTitle,
-            message: Strings.ProjectSetup.inputPanelMessage
+            message: Strings.ProjectSetup.inputPanelMessage,
+            allowedFileExtensions: configuration.selectableFileExtensions
         ) else {
             return
         }
@@ -317,10 +319,10 @@ class BaseProjectSetupViewModel: ProjectSetupViewModelType {
 }
 
 private struct ProjectMetadataTable {
-    let fileName: String
-    let rows: [ProjectMetadataRow]
+    public let fileName: String
+    public let rows: [ProjectMetadataRow]
 
-    init(url: URL, fields: [ProjectMetadataField]) throws {
+    public init(url: URL, fields: [ProjectMetadataField]) throws {
         fileName = url.lastPathComponent
         let text = try String(contentsOf: url, encoding: .utf8)
         let parsedRows = Self.parseCSV(text)
@@ -365,7 +367,7 @@ private struct ProjectMetadataTable {
 }
 
 private struct ProjectMetadataRow {
-    let valuesByFieldID: [String: String]
+    public let valuesByFieldID: [String: String]
 
     func value(for fieldID: String) -> String {
         valuesByFieldID[fieldID] ?? ""
@@ -377,9 +379,9 @@ private struct ProjectMetadataRow {
 }
 
 private struct ProjectMetadataColumnMapping {
-    let indexesByFieldID: [String: Int]
+    public let indexesByFieldID: [String: Int]
 
-    init(header: [String], fields: [ProjectMetadataField]) {
+    public init(header: [String], fields: [ProjectMetadataField]) {
         indexesByFieldID = fields.reduce(into: [:]) { indexes, field in
             let candidates = ([field.title] + field.csvAliases).map(\.normalizedFieldName)
             indexes[field.id] = Self.index(in: header, matching: candidates)

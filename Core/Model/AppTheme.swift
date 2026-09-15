@@ -8,14 +8,14 @@
 import SwiftUI
 
 /// Appearance preference selected by the user.
-enum AppTheme: String, CaseIterable, Identifiable {
+public enum AppTheme: String, CaseIterable, Identifiable {
     case system
     case light
     case dark
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var colorScheme: ColorScheme? {
+    public var colorScheme: ColorScheme? {
         switch self {
         case .system:
             nil
@@ -26,14 +26,14 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    var title: String {
+    public var title: String {
         switch self {
         case .system:
-            Strings.AppTheme.system
+            "System"
         case .light:
-            Strings.AppTheme.light
+            "Light"
         case .dark:
-            Strings.AppTheme.dark
+            "Dark"
         }
     }
 }

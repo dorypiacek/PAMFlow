@@ -6,16 +6,26 @@
 //
 
 import SwiftUI
+import Core
 
 /// Lets the user choose which workflow module a new project should use.
 ///
 /// This screen is intentionally before project creation so folder layout,
 /// scanning, preview rendering, and review steps can branch by module without
 /// duplicating the setup flow.
-struct DataTypeSelectionView: View {
-    @Environment(AppCoordinator.self) private var appCoordinator
+public struct DataTypeSelectionView: View {
+    @Environment(\.appCoordinator) private var appCoordinator
 
-    var body: some View {
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
+
+    public init() {}
+
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
@@ -25,9 +35,9 @@ struct DataTypeSelectionView: View {
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: Spacing.large) {
-                    ForEach(appCoordinator.moduleCatalog.details, id: \.id) { module in
+                    ForEach(coordinator.moduleCatalog.details, id: \.id) { module in
                         DataTypeButton(module: module) {
-                            appCoordinator.openModule(moduleID: module.id)
+                            coordinator.openModule(moduleID: module.id)
                         }
                     }
                 }
@@ -45,11 +55,11 @@ struct DataTypeSelectionView: View {
 
 /// Large module-selection button used by `DataTypeSelectionView`.
 private struct DataTypeButton: View {
-    let module: ModuleDetails
-    let action: () -> Void
+    public let module: ModuleDetails
+    public let action: () -> Void
     @State private var isHovering = false
 
-    var body: some View {
+    public var body: some View {
         Button(action: action) {
             VStack(spacing: Spacing.medium) {
                 Image(systemName: module.iconName)

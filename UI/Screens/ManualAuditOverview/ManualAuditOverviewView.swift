@@ -6,25 +6,33 @@
 //
 
 import SwiftData
+import Core
 import SwiftUI
 
 /// Renders manual-audit summary state and forwards workflow actions to its ViewModel.
-struct ManualAuditOverviewView: View {
+public struct ManualAuditOverviewView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(\.appCoordinator) private var appCoordinator
 
-    let projectID: UUID
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
+
+    public let projectID: UUID
 
     @State private var viewModel: ManualAuditOverviewViewModel
     @State private var isSpeciesExpanded = true
     @State private var isMediaBreakdownExpanded = false
 
-    init(projectID: UUID, viewModel: ManualAuditOverviewViewModel) {
+    public init(projectID: UUID, viewModel: ManualAuditOverviewViewModel) {
         self.projectID = projectID
         _viewModel = State(initialValue: viewModel)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
@@ -112,10 +120,12 @@ struct ManualAuditOverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack {
-                Button(Strings.ManualAuditOverview.backToAudit) {
-                    appCoordinator.goToNextStep(for: presentation.project, startAtLastReviewed: true)
+                if let secondaryActionTitle = presentation.secondaryActionTitle {
+                    Button(secondaryActionTitle) {
+                        coordinator.goToNextStep(for: presentation.project, startAtLastReviewed: true)
+                    }
+                    .buttonStyle(.secondaryAction)
                 }
-                .buttonStyle(.secondaryAction)
 
                 Button(presentation.primaryActionTitle) {
                     completePrimaryAction(presentation)
@@ -262,7 +272,7 @@ struct ManualAuditOverviewView: View {
             try viewModel.completePrimaryAction(
                 modelContext: modelContext,
                 overview: presentation,
-                coordinator: appCoordinator
+                coordinator: coordinator
             )
         } catch {
             viewModel.load(modelContext: modelContext)

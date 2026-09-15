@@ -8,7 +8,7 @@
 import Foundation
 
 /// Persistence boundary for the user-selected PAMFlow project library folder.
-protocol ProjectLibraryStoring {
+public protocol ProjectLibraryStoring {
     func load() -> URL?
     func save(_ url: URL) throws
 }
@@ -17,10 +17,10 @@ protocol ProjectLibraryStoring {
 ///
 /// Bookmark storage is required because the app is sandboxed and needs durable
 /// access to user-selected folders across launches.
-final class ProjectLibraryStore: ProjectLibraryStoring {
+public final class ProjectLibraryStore: ProjectLibraryStoring {
     private let key = "project_library_bookmark"
 
-    func load() -> URL? {
+    public func load() -> URL? {
         guard let bookmark = UserDefaults.standard.data(forKey: key) else {
             return nil
         }
@@ -34,7 +34,7 @@ final class ProjectLibraryStore: ProjectLibraryStoring {
         )
     }
 
-    func save(_ url: URL) throws {
+    public func save(_ url: URL) throws {
         let bookmark = try url.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,

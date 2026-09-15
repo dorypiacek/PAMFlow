@@ -11,7 +11,7 @@ import Foundation
 ///
 /// Core treats these values as opaque. Feature modules own the keys and typed
 /// accessors for media-specific scan data.
-nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
+public nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
     case string(String)
     case int(Int)
     case double(Double)
@@ -20,7 +20,7 @@ nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
     case ints([Int])
     case doubles([Double])
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(Bool.self) {
             self = .bool(value)
@@ -39,7 +39,7 @@ nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .string(let value):
@@ -60,7 +60,7 @@ nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
     }
 
     /// Stable text representation used by generic search and diagnostics.
-    nonisolated var searchText: String {
+    public nonisolated var searchText: String {
         switch self {
         case .string(let value):
             return value
@@ -80,7 +80,7 @@ nonisolated enum ScanAttributeValue: Codable, Equatable, Sendable {
     }
 }
 
-extension Dictionary where Key == String, Value == ScanAttributeValue {
+public extension Dictionary where Key == String, Value == ScanAttributeValue {
     nonisolated func string(_ key: String) -> String? {
         if case .string(let value) = self[key] { return value }
         return nil
@@ -114,43 +114,103 @@ extension Dictionary where Key == String, Value == ScanAttributeValue {
 }
 
 /// Technical scan output shared by every module.
-nonisolated struct ProjectScanSummary: Codable, Equatable, Sendable {
-    var projectName: String
-    var recorderID: String?
-    var inputFolder: String
-    var scannedAt: Date?
-    var fileCount: Int
-    var readableFileCount: Int
-    var unreadableFileCount: Int
-    var totalSizeBytes: Int
-    var durationMinSeconds: Double?
-    var durationMaxSeconds: Double?
-    var durationModeSeconds: Double?
-    var formats: [String]?
-    var qualityWarningCount: Int
-    var warnings: [String]
-    var attributes: [String: ScanAttributeValue]
-    var files: [ProjectScanFile]
+public nonisolated struct ProjectScanSummary: Codable, Equatable, Sendable {
+    public var projectName: String
+    public var recorderID: String?
+    public var inputFolder: String
+    public var scannedAt: Date?
+    public var fileCount: Int
+    public var readableFileCount: Int
+    public var unreadableFileCount: Int
+    public var totalSizeBytes: Int
+    public var durationMinSeconds: Double?
+    public var durationMaxSeconds: Double?
+    public var durationModeSeconds: Double?
+    public var formats: [String]?
+    public var qualityWarningCount: Int
+    public var warnings: [String]
+    public var attributes: [String: ScanAttributeValue]
+    public var files: [ProjectScanFile]
+
+    public init(
+        projectName: String,
+        recorderID: String?,
+        inputFolder: String,
+        scannedAt: Date?,
+        fileCount: Int,
+        readableFileCount: Int,
+        unreadableFileCount: Int,
+        totalSizeBytes: Int,
+        durationMinSeconds: Double?,
+        durationMaxSeconds: Double?,
+        durationModeSeconds: Double?,
+        formats: [String]?,
+        qualityWarningCount: Int,
+        warnings: [String],
+        attributes: [String: ScanAttributeValue] = [:],
+        files: [ProjectScanFile]
+    ) {
+        self.projectName = projectName
+        self.recorderID = recorderID
+        self.inputFolder = inputFolder
+        self.scannedAt = scannedAt
+        self.fileCount = fileCount
+        self.readableFileCount = readableFileCount
+        self.unreadableFileCount = unreadableFileCount
+        self.totalSizeBytes = totalSizeBytes
+        self.durationMinSeconds = durationMinSeconds
+        self.durationMaxSeconds = durationMaxSeconds
+        self.durationModeSeconds = durationModeSeconds
+        self.formats = formats
+        self.qualityWarningCount = qualityWarningCount
+        self.warnings = warnings
+        self.attributes = attributes
+        self.files = files
+    }
 }
 
 /// Technical scan output shared by every scanned source or generated review item.
-nonisolated struct ProjectScanFile: Codable, Equatable, Identifiable, Sendable {
-    var id: String { relativePath }
+public nonisolated struct ProjectScanFile: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { relativePath }
 
-    var fileName: String
-    var relativePath: String
-    var sizeBytes: Int
-    var readable: Bool
-    var readError: String
-    var durationSeconds: Double?
-    var format: String?
-    var qualityFlag: String
-    var qualityReasons: [String]
-    var attributes: [String: ScanAttributeValue]
+    public var fileName: String
+    public var relativePath: String
+    public var sizeBytes: Int
+    public var readable: Bool
+    public var readError: String
+    public var durationSeconds: Double?
+    public var format: String?
+    public var qualityFlag: String
+    public var qualityReasons: [String]
+    public var attributes: [String: ScanAttributeValue]
+
+    public init(
+        fileName: String,
+        relativePath: String,
+        sizeBytes: Int,
+        readable: Bool,
+        readError: String,
+        durationSeconds: Double?,
+        format: String?,
+        qualityFlag: String,
+        qualityReasons: [String],
+        attributes: [String: ScanAttributeValue] = [:]
+    ) {
+        self.fileName = fileName
+        self.relativePath = relativePath
+        self.sizeBytes = sizeBytes
+        self.readable = readable
+        self.readError = readError
+        self.durationSeconds = durationSeconds
+        self.format = format
+        self.qualityFlag = qualityFlag
+        self.qualityReasons = qualityReasons
+        self.attributes = attributes
+    }
 }
 
-extension ProjectScanSummary {
-    enum CodingKeys: String, CodingKey {
+public extension ProjectScanSummary {
+    enum CodingKeys: String, CodingKey, CaseIterable {
         case projectName = "project_name"
         case recorderID = "recorder_id"
         case inputFolder = "input_folder"
@@ -186,12 +246,13 @@ extension ProjectScanSummary {
         qualityWarningCount = try container.decode(Int.self, forKey: .qualityWarningCount)
         warnings = try container.decode([String].self, forKey: .warnings)
         attributes = try container.decodeIfPresent([String: ScanAttributeValue].self, forKey: .attributes) ?? [:]
+        attributes.merge(try Self.legacyAttributes(from: decoder, excluding: CodingKeys.allCases.map(\.stringValue))) { current, _ in current }
         files = try container.decode([ProjectScanFile].self, forKey: .files)
     }
 }
 
-extension ProjectScanFile {
-    enum CodingKeys: String, CodingKey {
+public extension ProjectScanFile {
+    enum CodingKeys: String, CodingKey, CaseIterable {
         case fileName = "file_name"
         case relativePath = "relative_path"
         case sizeBytes = "size_bytes"
@@ -216,5 +277,36 @@ extension ProjectScanFile {
         qualityFlag = try container.decode(String.self, forKey: .qualityFlag)
         qualityReasons = try container.decode([String].self, forKey: .qualityReasons)
         attributes = try container.decodeIfPresent([String: ScanAttributeValue].self, forKey: .attributes) ?? [:]
+        attributes.merge(try Self.legacyAttributes(from: decoder, excluding: CodingKeys.allCases.map(\.stringValue))) { current, _ in current }
+    }
+}
+
+private extension Decodable {
+    nonisolated static func legacyAttributes(from decoder: Decoder, excluding excludedKeys: [String]) throws -> [String: ScanAttributeValue] {
+        let excludedKeys = Set(excludedKeys)
+        let container = try decoder.container(keyedBy: LegacyScanAttributeKey.self)
+
+        return container.allKeys.reduce(into: [String: ScanAttributeValue]()) { attributes, key in
+            guard !excludedKeys.contains(key.stringValue),
+                  let value = try? container.decode(ScanAttributeValue.self, forKey: key) else {
+                return
+            }
+            attributes[key.stringValue] = value
+        }
+    }
+}
+
+private struct LegacyScanAttributeKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = String(intValue)
+        self.intValue = intValue
     }
 }

@@ -25,6 +25,7 @@ DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.dmg"
 TEMP_DMG_PATH="$ROOT_DIR/$OUTPUT_DIR/$APP_NAME.temp.dmg"
 SWIFT_MODULE_CACHE_PATH="${SWIFT_MODULE_CACHE_PATH:-/tmp/pamflow-dmg-swift-module-cache}"
 APP_ICON_NAME="${APP_ICON_NAME:-AppIcon}"
+APP_ICON_SOURCE="${APP_ICON_SOURCE:-$ROOT_DIR/App/Resources/$APP_ICON_NAME.icon}"
 SHARKTRACK_RUNTIME_DESTINATION_NAME="SharkTrackRuntime"
 SHARKTRACK_RUNTIME_SOURCE="${SHARKTRACK_RUNTIME_SOURCE:-}"
 SHARKTRACK_SOURCE="${SHARKTRACK_SOURCE:-}"
@@ -52,6 +53,33 @@ if [[ -z "${PUSH_VERSION_TAG:-}" ]]; then
 fi
 GENERATED_SHARKTRACK_RUNTIME_SOURCE=""
 RESOLVED_SIGN_IDENTITY=""
+
+resolve_module_compilation_conditions() {
+    local include_pam="${MODULE_INCLUDE_PAM:-1}"
+    local include_bruv="${MODULE_INCLUDE_BRUV:-1}"
+    local conditions=()
+
+    if [[ "$include_pam" != "1" && "$include_bruv" != "1" ]]; then
+        fail "At least one feature module must be included. Set MODULE_INCLUDE_PAM=1 or MODULE_INCLUDE_BRUV=1."
+    fi
+
+    if [[ -n "${MODULE_COMPILATION_CONDITIONS:-}" ]]; then
+        printf '%s\n' "$MODULE_COMPILATION_CONDITIONS"
+        return 0
+    fi
+
+    conditions+=('$(inherited)' "PAMFLOW_CUSTOM_MODULE_SELECTION")
+
+    if [[ "$include_pam" == "1" ]]; then
+        conditions+=("PAMFLOW_INCLUDE_PAM")
+    fi
+
+    if [[ "$include_bruv" == "1" ]]; then
+        conditions+=("PAMFLOW_INCLUDE_BRUV")
+    fi
+
+    printf '%s ' "${conditions[@]}"
+}
 
 log() {
     printf '[PAMFlow DMG] %s\n' "$1"
@@ -452,6 +480,20 @@ bundle_sharktrack_runtime() {
     ditto "$runtime_source" "$runtime_destination"
 }
 
+remove_excluded_module_resources() {
+    local app_bundle="$1"
+
+    if [[ "${MODULE_INCLUDE_PAM:-1}" != "1" ]]; then
+        log "Removing PAM resources from selected-module build"
+        rm -rf "$app_bundle/Contents/Resources/PAM_PAM.bundle"
+    fi
+
+    if [[ "${MODULE_INCLUDE_BRUV:-1}" != "1" ]]; then
+        log "Removing BRUV/RUV resources from selected-module build"
+        rm -rf "$app_bundle/Contents/Resources/BRUV_BRUV.bundle"
+    fi
+}
+
 cleanup_generated_sharktrack_runtime_if_needed() {
     if [[ "$REMOVE_SHARKTRACK_RUNTIME_AFTER_DMG" != "1" ]]; then
         return 0
@@ -653,9 +695,12 @@ log "Push version tag: $PUSH_VERSION_TAG"
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
     log "Building $APP_NAME ($CONFIGURATION)"
     xcodebuild -version
-    if [[ ! -d "$ROOT_DIR/PAMFlow/Resources/$APP_ICON_NAME.icon" ]]; then
-        fail "Expected Icon Composer source at PAMFlow/Resources/$APP_ICON_NAME.icon."
+    if [[ ! -d "$APP_ICON_SOURCE" ]]; then
+        fail "Expected Icon Composer source at $APP_ICON_SOURCE."
     fi
+
+    module_compilation_conditions="$(resolve_module_compilation_conditions)"
+    log "Module compilation conditions: $module_compilation_conditions"
 
     xcodebuild \
         -project "$ROOT_DIR/$PROJECT_PATH" \
@@ -664,6 +709,7 @@ if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
         -derivedDataPath "$ROOT_DIR/$DERIVED_DATA_PATH" \
         -destination 'platform=macOS' \
         "ASSETCATALOG_COMPILER_APPICON_NAME=$APP_ICON_NAME" \
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$module_compilation_conditions" \
         build
 else
     log "Skipping build and packaging existing app"
@@ -679,9 +725,14 @@ log "Preparing staging folder"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR" "$ROOT_DIR/$OUTPUT_DIR"
 ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
+remove_excluded_module_resources "$STAGING_DIR/$APP_NAME.app"
 create_applications_link "$STAGING_DIR"
 ensure_app_icon "$STAGING_DIR/$APP_NAME.app"
-bundle_sharktrack_runtime "$STAGING_DIR/$APP_NAME.app"
+if [[ "${MODULE_INCLUDE_BRUV:-1}" == "1" ]]; then
+    bundle_sharktrack_runtime "$STAGING_DIR/$APP_NAME.app"
+else
+    log "Skipping SharkTrack runtime for PAM-only build"
+fi
 resign_app_if_needed "$STAGING_DIR/$APP_NAME.app"
 if [[ "$SKIP_DMG_STYLING" == "1" ]]; then
     log "Skipping DMG background for non-interactive packaging"

@@ -6,6 +6,8 @@
 //
 
 import SwiftData
+import UI
+import Core
 import SwiftUI
 
 /// Renders BRUV/RUV SharkTrack progress while its ViewModel owns processing state.

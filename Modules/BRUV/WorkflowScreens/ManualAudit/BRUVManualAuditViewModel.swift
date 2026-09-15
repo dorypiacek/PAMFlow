@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import SwiftData
 
 /// Manual-audit behavior for BRUV/RUV frame and image detections.
@@ -13,11 +15,7 @@ import SwiftData
 @MainActor
 final class BRUVManualAuditViewModel: ManualAuditViewModel {
     override func reviewTitle(project: Project) -> String {
-        Strings.ManualAudit.frameReviewTitle
-    }
-
-    override func previewKind(project: Project) -> ManualAuditPreviewKind {
-        .image
+        BRUVStrings.ManualAudit.title
     }
 
     override func shouldShowReviewAction(project: Project) -> Bool {
@@ -109,13 +107,13 @@ final class BRUVManualAuditViewModel: ManualAuditViewModel {
         return isGeneratedVisualOutputName(file.fileName) ? Strings.Common.unknown : file.fileName
     }
 
-    override func imagePreviewURL(file: ProjectScanFile, project: Project) -> URL? {
-        let relativePath = file.sharkTrackPreviewPath ?? file.relativePath
-        if let rootURL = project.rootFolderURL?.appendingPathComponent(relativePath),
-           FileManager.default.fileExists(atPath: rootURL.path) {
-            return rootURL
-        }
-        return project.inputFolderURL?.appendingPathComponent(relativePath)
+    func imagePreviewURL(file: ProjectScanFile, project: Project) -> URL? {
+        let previewPath = file.sharkTrackPreviewPath ?? file.relativePath
+        return firstExistingURL(
+            path: previewPath,
+            relativeFallbackPath: file.relativePath,
+            project: project
+        )
     }
 
     override func effectiveMaxN(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> Int? {
@@ -171,5 +169,30 @@ final class BRUVManualAuditViewModel: ManualAuditViewModel {
     private func isGeneratedVisualOutputName(_ name: String) -> Bool {
         let lowercased = name.lowercased()
         return lowercased.contains("elasmobranch") || lowercased.contains("sharktrack")
+    }
+
+    private func firstExistingURL(path: String, relativeFallbackPath: String, project: Project) -> URL? {
+        let candidatePaths = [path, relativeFallbackPath].filter { !$0.isEmpty }.uniqueStrings()
+        let baseURLs = [
+            project.rootFolderURL,
+            project.inputFolderURL,
+            project.rawInputFolderURL
+        ]
+
+        for candidatePath in candidatePaths {
+            let candidateURL = URL(fileURLWithPath: candidatePath)
+            if candidateURL.isFileURL, candidateURL.path.hasPrefix("/"), FileManager.default.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+
+            for baseURL in baseURLs.compactMap({ $0 }) {
+                let url = baseURL.appendingPathComponent(candidatePath)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    return url
+                }
+            }
+        }
+
+        return project.rootFolderURL?.appendingPathComponent(path)
     }
 }

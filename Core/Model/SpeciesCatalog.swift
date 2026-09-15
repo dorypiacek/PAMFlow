@@ -8,39 +8,39 @@
 import Foundation
 
 /// Taxonomic choice shown in the optional species selector.
-struct SpeciesTaxon: Identifiable, Hashable {
-    var id: String { "\(family)::\(genus)::\(species)" }
+public struct SpeciesTaxon: Identifiable, Hashable, Sendable {
+    public var id: String { "\(family)::\(genus)::\(species)" }
 
-    let family: String
-    let genus: String
-    let species: String
-    let commonName: String?
+    public let family: String
+    public let genus: String
+    public let species: String
+    public let commonName: String?
 
-    init(family: String, genus: String, species: String, commonName: String? = nil) {
+    public init(family: String, genus: String, species: String, commonName: String? = nil) {
         self.family = family
         self.genus = genus
         self.species = species.trimmingCharacters(in: .whitespacesAndNewlines)
         self.commonName = commonName?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    var fullName: String {
+    public var fullName: String {
         "\(genus) \(species)"
     }
 
     /// Searchable, user-facing label containing scientific and common names.
-    var displayName: String {
+    public var displayName: String {
         guard let commonName, !commonName.isEmpty else { return fullName }
         return "\(fullName) (\(commonName))"
     }
 
-    func matches(_ query: String) -> Bool {
+    public func matches(_ query: String) -> Bool {
         query.isEmpty || displayName.localizedCaseInsensitiveContains(query)
     }
 }
 
 /// Hardcoded MVP species lists available for modules that need species assignment.
-enum SpeciesCatalog {
-    static let cetaceans: [SpeciesTaxon] = [
+public enum SpeciesCatalog {
+    public static let cetaceans: [SpeciesTaxon] = [
         SpeciesTaxon(family: "Delphinidae", genus: "Tursiops", species: "truncatus"),
         SpeciesTaxon(family: "Delphinidae", genus: "Delphinus", species: "delphis"),
         SpeciesTaxon(family: "Delphinidae", genus: "Lagenorhynchus", species: "albirostris"),
@@ -48,7 +48,7 @@ enum SpeciesCatalog {
         SpeciesTaxon(family: "Physeteridae", genus: "Physeter", species: "macrocephalus")
     ]
 
-    static let elasmobranchs: [SpeciesTaxon] = [
+    public static let elasmobranchs: [SpeciesTaxon] = [
         SpeciesTaxon(family: "Carcharhinidae", genus: "Carcharhinus", species: "amblyrhynchos", commonName: "Grey Reef Shark"),
         SpeciesTaxon(family: "Carcharhinidae", genus: "Carcharhinus", species: "brachyurus", commonName: "Copper Shark (Bronze Whaler)"),
         SpeciesTaxon(family: "Carcharhinidae", genus: "Carcharhinus", species: "falciformis", commonName: "Silky Shark"),

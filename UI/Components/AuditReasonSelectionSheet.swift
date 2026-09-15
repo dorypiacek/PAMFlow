@@ -6,14 +6,22 @@
 //
 
 import SwiftUI
+import Core
 
-struct AuditReasonConfiguration: Equatable {
-    var title: String
-    var options: [String]
-    var textOnly: Bool
-    var isRequired: Bool
+public struct AuditReasonConfiguration: Equatable {
+    public var title: String
+    public var options: [String]
+    public var textOnly: Bool
+    public var isRequired: Bool
 
-    static func manualAudit() -> AuditReasonConfiguration {
+    public init(title: String, options: [String], textOnly: Bool, isRequired: Bool) {
+        self.title = title
+        self.options = options
+        self.textOnly = textOnly
+        self.isRequired = isRequired
+    }
+
+    public static func manualAudit() -> AuditReasonConfiguration {
         AuditReasonConfiguration(
             title: Strings.AuditReason.addReason,
             options: [Strings.AuditReason.deploymentNoise, Strings.AuditReason.fileCorrupted, Strings.Common.other],
@@ -22,16 +30,7 @@ struct AuditReasonConfiguration: Equatable {
         )
     }
 
-    static func pamDetectionReview() -> AuditReasonConfiguration {
-        AuditReasonConfiguration(
-            title: Strings.AuditReason.addReason,
-            options: [Strings.AuditReason.falsePositive, Strings.Common.other],
-            textOnly: false,
-            isRequired: true
-        )
-    }
-
-    static func freeTextOptional() -> AuditReasonConfiguration {
+    public static func freeTextOptional() -> AuditReasonConfiguration {
         AuditReasonConfiguration(
             title: Strings.AuditReason.addReason,
             options: [],
@@ -41,16 +40,16 @@ struct AuditReasonConfiguration: Equatable {
     }
 }
 
-struct AuditReasonSelectionSheet: View {
-    let configuration: AuditReasonConfiguration
-    let currentReason: String
-    let onSave: (String) -> Void
-    let onClose: () -> Void
+public struct AuditReasonSelectionSheet: View {
+    public let configuration: AuditReasonConfiguration
+    public let currentReason: String
+    public let onSave: (String) -> Void
+    public let onClose: () -> Void
 
     @State private var selectedOption: String
     @State private var detailText: String
 
-    init(
+    public init(
         configuration: AuditReasonConfiguration,
         currentReason: String,
         onSave: @escaping (String) -> Void,
@@ -76,7 +75,7 @@ struct AuditReasonSelectionSheet: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.large) {
             header
 
@@ -143,7 +142,7 @@ struct AuditReasonSelectionSheet: View {
             Button {
                 onClose()
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: Icons.close)
             }
             .buttonStyle(.iconAction)
         }

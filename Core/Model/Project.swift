@@ -13,48 +13,48 @@ import SwiftData
 /// A project is media-agnostic. Module-specific processing details should live
 /// outside this model.
 @Model
-final class Project {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var createdAt: Date
-    var updatedAt: Date?
-    var lastOpenedAt: Date?
+public final class Project {
+    @Attribute(.unique) public var id: UUID
+    public var name: String
+    public var createdAt: Date
+    public var updatedAt: Date?
+    public var lastOpenedAt: Date?
     var workflowStatusRaw: String?
-    var scanStartedAt: Date?
-    var scanCompletedAt: Date?
+    public var scanStartedAt: Date?
+    public var scanCompletedAt: Date?
     /// Reviewer name captured the first time the project is completed.
     ///
     /// This is intentionally optional so existing projects migrate without
     /// requiring a synthetic reviewer value. In-progress projects keep using the
     /// active profile name until completion freezes the value.
-    var completedBy: String? = nil
+    public var completedBy: String? = nil
     
     /// Stable identifier of the active workflow module.
-    var moduleID: String
+    public var moduleID: String
     /// Module-defined metadata values captured during project setup.
     ///
     /// Keys are owned by the active module. Core persists the values without
     /// interpreting their meaning.
-    var metadataValues: [String: String] = [:]
+    public var metadataValues: [String: String] = [:]
     /// Metadata field used by generic lists and summaries when a single compact
     /// project identifier is needed.
-    var metadataSummaryFieldID: String? = nil
+    public var metadataSummaryFieldID: String? = nil
     /// Security-scoped bookmark for the project root folder.
-    var rootFolderBookmark: Data
+    public var rootFolderBookmark: Data
     /// Security-scoped bookmark for the originally selected input folder.
-    var inputFolderBookmark: Data
+    public var inputFolderBookmark: Data
     /// Security-scoped bookmark for the raw media folder selected by the user.
     ///
     /// This may differ from `inputFolderBookmark` when the user selected
     /// individual files and PAMFlow created an internal symlink source folder
     /// for processing.
-    var rawInputFolderBookmark: Data? = nil
+    public var rawInputFolderBookmark: Data? = nil
     /// Durable scan / detection overview snapshot used when the project folder
     /// or generated resources are no longer available.
     @Attribute(.externalStorage) var scanSummaryData: Data? = nil
-    var scanSummaryUpdatedAt: Date? = nil
+    public var scanSummaryUpdatedAt: Date? = nil
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         createdAt: Date = .now,
@@ -80,7 +80,7 @@ final class Project {
     }
 }
 
-extension Project {
+public extension Project {
     var workflowStatus: ProjectWorkflowStatus {
         get {
             guard let workflowStatusRaw else {
@@ -91,6 +91,16 @@ extension Project {
         }
         set {
             workflowStatusRaw = newValue.rawValue
+            updatedAt = .now
+        }
+    }
+
+    /// Rewrites legacy workflow tokens to the canonical persisted form when a
+    /// project is next saved.
+    func normalizeWorkflowStatus() {
+        let normalized = workflowStatus.rawValue
+        if workflowStatusRaw != normalized {
+            workflowStatusRaw = normalized
             updatedAt = .now
         }
     }

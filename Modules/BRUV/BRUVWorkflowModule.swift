@@ -6,21 +6,24 @@
 //
 
 import Foundation
+import UI
+import Core
+import SwiftData
 import SwiftUI
 
 /// Feature module for baited remote underwater video projects and related RUV workflows.
 @MainActor
-final class BRUVWorkflowModule: FeatureModule {
-    let details: ModuleDetails
+public final class BRUVWorkflowModule: FeatureModule {
+    public let details: ModuleDetails
 
     private let projectType: BRUVProjectType
 
-    init(projectType: BRUVProjectType) {
+    public init(projectType: BRUVProjectType) {
         self.projectType = projectType
         details = BRUVModuleConfiguration.details(for: projectType)
     }
 
-    func makeCoordinator(context: ModuleContext) -> ModuleCoordinating {
+    public func makeCoordinator(context: ModuleContext) -> ModuleCoordinating {
         WorkflowCoordinator(
             projectType: projectType,
             details: details,
@@ -28,9 +31,87 @@ final class BRUVWorkflowModule: FeatureModule {
             dependencies: BRUVWorkflowDependencies(sharedDependencies: context.dependencies)
         )
     }
+
+    public func projectSelectionProgress(
+        for project: Project,
+        modelContext: ModelContext,
+        projectScanService: ProjectScanServicing
+    ) -> ProjectSelectionProgress {
+        guard var summary = try? projectScanService.loadSummary(for: project) else {
+            return ProjectSelectionProgress(reviewed: 0, total: 0, displayPosition: 0)
+        }
+        sortReviewFiles(&summary.files)
+        return ProjectSelectionProgress(project: project, modelContext: modelContext, files: summary.files)
+    }
+
+    private func sortReviewFiles(_ files: inout [ProjectScanFile]) {
+        files.sort(by: { left, right in
+            let leftVideo = left.sourceVideo ?? ""
+            let rightVideo = right.sourceVideo ?? ""
+            if leftVideo != rightVideo { return leftVideo < rightVideo }
+
+            let leftTrack = left.trackID ?? Int.max
+            let rightTrack = right.trackID ?? Int.max
+            if leftTrack != rightTrack { return leftTrack < rightTrack }
+
+            return left.relativePath < right.relativePath
+        })
+    }
+
+    public func projectSelectionPresentation(
+        for project: Project,
+        folderExists: Bool,
+        auditProgressText: String
+    ) -> ProjectSelectionPresentation {
+        switch project.workflowStatus {
+        case .created:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.created,
+                primaryActionTitle: Strings.WorkflowStatus.resumeScan,
+                lastCompletedStepTitle: Strings.WorkflowStatus.projectCreated
+            )
+        case .scanInProgress:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.scanInProgress,
+                primaryActionTitle: Strings.WorkflowStatus.resumeScan,
+                lastCompletedStepTitle: Strings.WorkflowStatus.scanInProgress
+            )
+        case .scanCompleted:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.ProjectSelection.processingCompleted,
+                primaryActionTitle: Strings.WorkflowStatus.continueToOverview,
+                lastCompletedStepTitle: Strings.WorkflowStatus.scanCompleted
+            )
+        case .manualAuditInProgress, .detectionReviewInProgress, .inProgress:
+            ProjectSelectionPresentation(
+                statusTitle: BRUVStrings.ProjectSelection.detectionReviewInProgress,
+                primaryActionTitle: BRUVStrings.ProjectSelection.continueDetectionReview,
+                lastCompletedStepTitle: "\(BRUVStrings.ProjectSelection.detectionReviewProgressPrefix) \(auditProgressText)"
+            )
+        case .manualAuditCompleted:
+            ProjectSelectionPresentation(
+                statusTitle: BRUVStrings.ProjectSelection.detectionReviewCompleted,
+                primaryActionTitle: BRUVStrings.ProjectSelection.openDetectionOverview,
+                lastCompletedStepTitle: BRUVStrings.ProjectSelection.detectionReviewCompleted
+            )
+        case .completed:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.completed,
+                primaryActionTitle: Strings.WorkflowStatus.viewProject,
+                lastCompletedStepTitle: Strings.WorkflowStatus.completed
+            )
+        default:
+            ProjectSelectionPresentation(
+                statusTitle: project.workflowStatus.genericDisplayTitle,
+                primaryActionTitle: Strings.WorkflowStatus.viewProject,
+                lastCompletedStepTitle: project.workflowStatus.genericDisplayTitle
+            )
+        }
+    }
 }
 
 /// Service dependencies required by the BRUV workflow module.
+@MainActor
 private struct BRUVWorkflowDependencies {
     let projectFileService: ProjectFileServicing
     let projectScanService: ProjectScanServicing
@@ -135,7 +216,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
     private func makeScreen(for route: ModuleScreenRoute) -> AnyView {
         switch route.screenID {
         case WorkflowScreenID.scanProject:
-            AnyView(
+            return AnyView(
                 ScanProjectView(
                     projectID: route.projectID,
                     supportedFileExtensions: details.supportedFileExtensions,
@@ -143,7 +224,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.projectOverview:
-            AnyView(
+            return AnyView(
                 NewProjectOverviewView(
                     projectID: route.projectID,
                     viewModel: BRUVProjectOverviewViewModel(
@@ -153,7 +234,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.sharkTrackProcessing:
-            AnyView(
+            return AnyView(
                 SharkTrackProcessingView(
                     projectID: route.projectID,
                     workflowActions: workflowActions,
@@ -162,17 +243,20 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.manualAudit:
-            AnyView(
+            let viewModel = BRUVManualAuditViewModel(
+                projectScanService: dependencies.projectScanService
+            )
+            return AnyView(
                 ManualAuditView(
                     projectID: route.projectID,
                     startAtLastReviewed: route.startAtLastReviewed,
-                    viewModel: BRUVManualAuditViewModel(
-                        projectScanService: dependencies.projectScanService
-                    )
-                )
+                    viewModel: viewModel
+                ) { _, project, file in
+                    BRUVManualAuditPreview(viewModel: viewModel, project: project, file: file)
+                }
             )
         case WorkflowScreenID.manualAuditOverview:
-            AnyView(
+            return AnyView(
                 ManualAuditOverviewView(
                     projectID: route.projectID,
                     viewModel: BRUVManualAuditOverviewViewModel(
@@ -182,9 +266,10 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.projectCompletion:
-            AnyView(ProjectCompletionView(projectID: route.projectID, projectScanService: dependencies.projectScanService))
+            return AnyView(BRUVProjectCompletionView(projectID: route.projectID, projectScanService: dependencies.projectScanService))
         default:
-            AnyView(ProjectSelectionView())
+            workflowActions.exitWorkflow()
+            return AnyView(EmptyView())
         }
     }
 
@@ -221,12 +306,19 @@ private final class WorkflowCoordinator: ModuleCoordinating {
         switch currentRoute.screenID {
         case WorkflowScreenID.projectOverview:
             showNextFromProjectOverview(project)
+        case WorkflowScreenID.manualAuditOverview:
+            if project.workflowStatus == .completed {
+                show(.projectCompletion, for: project)
+                return
+            }
+            show(.manualAudit, for: project, startAtLastReviewed: startAtLastReviewed)
         default:
             resume(project: project, startAtLastReviewed: startAtLastReviewed)
         }
     }
 
     func resume(project: Project, startAtLastReviewed: Bool = false) {
+        project.normalizeWorkflowStatus()
         switch project.workflowStatus {
         case .created, .scanInProgress:
             show(.scanProject, for: project)

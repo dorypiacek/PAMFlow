@@ -6,10 +6,13 @@
 //
 
 import Foundation
+import UI
+import Core
 import SharkTrackKit
 
 /// SharkTrack pre-audit preparation boundary for BRUV and RUV workflows.
 protocol SharkTrackServicing: Sendable {
+    @MainActor
     func prepareInitialAuditBatch(
         for project: Project,
         onProgress: @escaping @Sendable (SharkTrackPreparationProgress) -> Void
@@ -52,6 +55,7 @@ nonisolated final class SharkTrackService: SharkTrackServicing {
         self.isSimulationEnabled = isSimulationEnabled
     }
 
+    @MainActor
     func prepareInitialAuditBatch(
         for project: Project,
         onProgress: @escaping @Sendable (SharkTrackPreparationProgress) -> Void = { _ in }
@@ -142,7 +146,7 @@ nonisolated final class SharkTrackService: SharkTrackServicing {
     }
 
     nonisolated private func processMediaFiles(
-        module: WorkflowModule,
+        module: BRUVProjectType,
         inputFolderURL: URL,
         outputURL: URL,
         onProgress: @escaping @Sendable (SharkTrackPreparationProgress) -> Void

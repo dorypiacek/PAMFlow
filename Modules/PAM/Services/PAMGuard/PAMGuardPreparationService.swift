@@ -6,6 +6,8 @@
 //
 
 import Darwin
+import UI
+import Core
 import Foundation
 
 /// PAMGuard template/package preparation boundary.
@@ -216,10 +218,15 @@ final class PAMGuardPreparationService: PAMGuardPreparationServicing {
         target: DetectionTarget,
         outputFolderURL: URL
     ) throws -> URL {
-        guard let bundledTemplateURL = Bundle.main.url(
-            forResource: "template",
-            withExtension: "psfx"
-        ) else {
+        let packageTemplateURL = Bundle.module.url(forResource: "template", withExtension: "psfx")
+            ?? Bundle.module.url(
+                forResource: "template",
+                withExtension: "psfx",
+                subdirectory: "PAMGuardTemplates"
+            )
+        let appTemplateURL = Bundle.main.url(forResource: "template", withExtension: "psfx")
+
+        guard let bundledTemplateURL = packageTemplateURL ?? appTemplateURL else {
             throw PreparationError.missingTemplate
         }
 

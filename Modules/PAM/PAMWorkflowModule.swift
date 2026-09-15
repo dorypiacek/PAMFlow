@@ -6,15 +6,19 @@
 //
 
 import Foundation
+import UI
+import Core
 import SwiftData
 import SwiftUI
 
 /// Feature module for passive acoustic monitoring projects.
 @MainActor
-final class PAMWorkflowModule: FeatureModule {
-    let details = PAMModuleConfiguration.details
+public final class PAMWorkflowModule: FeatureModule {
+    public let details = PAMModuleConfiguration.details
 
-    func makeCoordinator(context: ModuleContext) -> ModuleCoordinating {
+    public init() {}
+
+    public func makeCoordinator(context: ModuleContext) -> ModuleCoordinating {
         WorkflowCoordinator(
             workflowActions: context.workflowActions,
             dependencies: PAMWorkflowDependencies(sharedDependencies: context.dependencies)
@@ -22,7 +26,7 @@ final class PAMWorkflowModule: FeatureModule {
     }
 
     /// Prepares the first likely audio file for fast playback from the project list.
-    func preheatProjectPreviews(project: Project, modelContext: ModelContext, dependencies: SharedAppDependencies) {
+    public func preheatProjectPreviews(project: Project, modelContext: ModelContext, dependencies: SharedAppDependencies) {
         guard let inputFolderURL = project.inputFolderURL else { return }
 
         do {
@@ -42,6 +46,26 @@ final class PAMWorkflowModule: FeatureModule {
             )
         } catch {
             AppLog.info("PAM project selection preview preheat failed for '\(project.name)': \(error.localizedDescription)")
+        }
+    }
+
+    public func projectSelectionProgress(
+        for project: Project,
+        modelContext: ModelContext,
+        projectScanService: ProjectScanServicing
+    ) -> ProjectSelectionProgress {
+        guard var summary = try? projectScanService.loadSummary(for: project) else {
+            return ProjectSelectionProgress(reviewed: 0, total: 0, displayPosition: 0)
+        }
+        sortReviewFiles(&summary.files)
+        return ProjectSelectionProgress(project: project, modelContext: modelContext, files: summary.files)
+    }
+
+    private func sortReviewFiles(_ files: inout [ProjectScanFile]) {
+        if files.contains(where: { $0.pamDetectionStatus == PAMScanStatus.pamguard }) {
+            files.sort {
+                ($0.pamDetectionID ?? Int.max) < ($1.pamDetectionID ?? Int.max)
+            }
         }
     }
 
@@ -84,9 +108,91 @@ final class PAMWorkflowModule: FeatureModule {
     private func isSupportedAudioPath(_ path: String) -> Bool {
         PAMMediaFileExtensions.audio.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
     }
+
+    public func projectSelectionPresentation(
+        for project: Project,
+        folderExists: Bool,
+        auditProgressText: String
+    ) -> ProjectSelectionPresentation {
+        switch project.workflowStatus {
+        case .created:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.created,
+                primaryActionTitle: Strings.WorkflowStatus.resumeScan,
+                lastCompletedStepTitle: Strings.WorkflowStatus.projectCreated
+            )
+        case .scanInProgress:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.scanInProgress,
+                primaryActionTitle: Strings.WorkflowStatus.resumeScan,
+                lastCompletedStepTitle: Strings.WorkflowStatus.scanInProgress
+            )
+        case .scanCompleted:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.scanCompleted,
+                primaryActionTitle: Strings.WorkflowStatus.continueToOverview,
+                lastCompletedStepTitle: Strings.WorkflowStatus.scanCompleted
+            )
+        case .manualAuditInProgress, .inProgress:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.manualAuditInProgress,
+                primaryActionTitle: Strings.WorkflowStatus.continueManualAudit,
+                lastCompletedStepTitle: "\(Strings.ProjectSelection.manualAuditProgressPrefix) \(auditProgressText)"
+            )
+        case .manualAuditCompleted:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.manualAuditCompleted,
+                primaryActionTitle: Strings.WorkflowStatus.openAuditOverview,
+                lastCompletedStepTitle: Strings.WorkflowStatus.manualAuditCompleted
+            )
+        case .pamguardSetupReady:
+            ProjectSelectionPresentation(
+                statusTitle: PAMStrings.Overview.readyForPamguard,
+                primaryActionTitle: PAMStrings.Overview.goToPamguardSetup,
+                lastCompletedStepTitle: Strings.WorkflowStatus.manualAuditCompleted
+            )
+        case .processingProjectCreated:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.processingProjectCreated,
+                primaryActionTitle: Strings.WorkflowStatus.importProcessingRun,
+                lastCompletedStepTitle: Strings.WorkflowStatus.processingProjectCreated
+            )
+        case .processingRunImported:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.processingRunImported,
+                primaryActionTitle: Strings.WorkflowStatus.openRunOverview,
+                lastCompletedStepTitle: Strings.WorkflowStatus.processingRunImported
+            )
+        case .runOverviewCompleted:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.runOverviewCompleted,
+                primaryActionTitle: Strings.WorkflowStatus.continueDetectionReview,
+                lastCompletedStepTitle: Strings.WorkflowStatus.runOverviewCompleted
+            )
+        case .detectionReviewInProgress:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.detectionReviewInProgress,
+                primaryActionTitle: Strings.WorkflowStatus.continueDetectionReview,
+                lastCompletedStepTitle: "\(Strings.ProjectSelection.detectionReviewProgressPrefix) \(auditProgressText)"
+            )
+        case .completed:
+            ProjectSelectionPresentation(
+                statusTitle: Strings.WorkflowStatus.completed,
+                primaryActionTitle: Strings.WorkflowStatus.viewProject,
+                lastCompletedStepTitle: Strings.WorkflowStatus.completed
+            )
+        default:
+            ProjectSelectionPresentation(
+                statusTitle: project.workflowStatus.genericDisplayTitle,
+                primaryActionTitle: Strings.WorkflowStatus.viewProject,
+                lastCompletedStepTitle: project.workflowStatus.genericDisplayTitle
+            )
+        }
+    }
 }
 
 /// Service dependencies required by the PAM workflow module.
+@MainActor
 private struct PAMWorkflowDependencies {
     let projectFileService: ProjectFileServicing
     let projectScanService: ProjectScanServicing
@@ -196,7 +302,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
     private func makeScreen(for route: ModuleScreenRoute) -> AnyView {
         switch route.screenID {
         case WorkflowScreenID.scanProject:
-            AnyView(
+            return AnyView(
                 ScanProjectView(
                     projectID: route.projectID,
                     supportedFileExtensions: PAMMediaFileExtensions.audio,
@@ -204,7 +310,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.projectOverview:
-            AnyView(
+            return AnyView(
                 NewProjectOverviewView(
                     projectID: route.projectID,
                     viewModel: PAMProjectOverviewViewModel(
@@ -214,28 +320,32 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.manualAudit:
-            AnyView(
+            let viewModel = PAMManualAuditViewModel(
+                projectScanService: dependencies.projectScanService,
+                audioPreviewCacheService: dependencies.audioPreviewCacheService
+            )
+            return AnyView(
                 ManualAuditView(
                     projectID: route.projectID,
                     startAtLastReviewed: route.startAtLastReviewed,
-                    viewModel: PAMManualAuditViewModel(
+                    viewModel: viewModel
+                ) { _, project, file in
+                    PAMManualAuditPreview(viewModel: viewModel, project: project, file: file)
+                }
+            )
+        case WorkflowScreenID.manualAuditOverview:
+            return AnyView(
+                ManualAuditOverviewView(
+                    projectID: route.projectID,
+                    viewModel: PAMManualAuditOverviewViewModel(
+                        projectID: route.projectID,
                         projectScanService: dependencies.projectScanService,
                         audioPreviewCacheService: dependencies.audioPreviewCacheService
                     )
                 )
             )
-        case WorkflowScreenID.manualAuditOverview:
-            AnyView(
-                ManualAuditOverviewView(
-                    projectID: route.projectID,
-                    viewModel: PAMManualAuditOverviewViewModel(
-                        projectID: route.projectID,
-                        projectScanService: dependencies.projectScanService
-                    )
-                )
-            )
         case WorkflowScreenID.pamguardSetup:
-            AnyView(
+            return AnyView(
                 PAMGuardSetupView(
                     projectID: route.projectID,
                     projectScanService: dependencies.projectScanService,
@@ -244,9 +354,9 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.pamguardWaiting:
-            AnyView(PAMGuardWaitingView(projectID: route.projectID, workflowActions: workflowActions))
+            return AnyView(PAMGuardWaitingView(projectID: route.projectID, workflowActions: workflowActions))
         case WorkflowScreenID.pamguardProcessing:
-            AnyView(
+            return AnyView(
                 PAMGuardProcessingView(
                     projectID: route.projectID,
                     projectScanService: dependencies.projectScanService,
@@ -255,9 +365,10 @@ private final class WorkflowCoordinator: ModuleCoordinating {
                 )
             )
         case WorkflowScreenID.projectCompletion:
-            AnyView(ProjectCompletionView(projectID: route.projectID, projectScanService: dependencies.projectScanService))
+            return AnyView(PAMProjectCompletionView(projectID: route.projectID, projectScanService: dependencies.projectScanService))
         default:
-            AnyView(ProjectSelectionView())
+            workflowActions.exitWorkflow()
+            return AnyView(EmptyView())
         }
     }
 
@@ -308,6 +419,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
     }
 
     func resume(project: Project, startAtLastReviewed: Bool = false) {
+        project.normalizeWorkflowStatus()
         switch project.workflowStatus {
         case .created, .scanInProgress:
             show(.scanProject, for: project)
@@ -352,7 +464,7 @@ private final class WorkflowCoordinator: ModuleCoordinating {
     }
 
     private func showNextFromManualAuditOverview(_ project: Project, startAtLastReviewed: Bool) {
-        guard project.workflowStatus == .processingProjectCreated else {
+        guard project.workflowStatus == .pamguardSetupReady else {
             resume(project: project, startAtLastReviewed: startAtLastReviewed)
             return
         }

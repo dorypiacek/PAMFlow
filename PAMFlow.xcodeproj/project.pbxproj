@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8A9F02072FEBD4A000000001 /* SharkTrackKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8A9F02062FEBD4A000000001 /* SharkTrackKit */; };
+		8A9F03072FEBD4A000000001 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 8A9F03062FEBD4A000000001 /* Core */; };
+		8A9F03092FEBD4A000000001 /* UI in Frameworks */ = {isa = PBXBuildFile; productRef = 8A9F03082FEBD4A000000001 /* UI */; };
+		8A9F030B2FEBD4A000000001 /* PAM in Frameworks */ = {isa = PBXBuildFile; productRef = 8A9F030A2FEBD4A000000001 /* PAM */; };
+		8A9F030D2FEBD4A000000001 /* BRUV in Frameworks */ = {isa = PBXBuildFile; productRef = 8A9F030C2FEBD4A000000001 /* BRUV */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,7 +45,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A9F02072FEBD4A000000001 /* SharkTrackKit in Frameworks */,
+				8A9F03072FEBD4A000000001 /* Core in Frameworks */,
+				8A9F03092FEBD4A000000001 /* UI in Frameworks */,
+				8A9F030B2FEBD4A000000001 /* PAM in Frameworks */,
+				8A9F030D2FEBD4A000000001 /* BRUV in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,13 +91,13 @@
 			);
 			fileSystemSynchronizedGroups = (
 				8A287E752FD489470069997C /* App */,
-				8A287E802FD489470069997C /* Core */,
-				8A287E812FD489470069997C /* UI */,
-				8A287E822FD489470069997C /* Modules */,
 			);
 			name = PAMFlow;
 			packageProductDependencies = (
-				8A9F02062FEBD4A000000001 /* SharkTrackKit */,
+				8A9F03062FEBD4A000000001 /* Core */,
+				8A9F03082FEBD4A000000001 /* UI */,
+				8A9F030A2FEBD4A000000001 /* PAM */,
+				8A9F030C2FEBD4A000000001 /* BRUV */,
 			);
 			productName = PAMFlow;
 			productReference = 8A287E732FD489470069997C /* PAMFlow.app */;
@@ -122,7 +128,10 @@
 			mainGroup = 8A287E6A2FD489460069997C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8A9F02052FEBD4A000000001 /* XCRemoteSwiftPackageReference "SharkTrackKit" */,
+				8A9F03052FEBD4A000000001 /* XCLocalSwiftPackageReference "Core" */,
+				8A9F030E2FEBD4A000000001 /* XCLocalSwiftPackageReference "UI" */,
+				8A9F030F2FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/PAM" */,
+				8A9F03102FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/BRUV" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8A287E742FD489470069997C /* Products */;
@@ -394,22 +403,45 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		8A9F02052FEBD4A000000001 /* XCRemoteSwiftPackageReference "SharkTrackKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/dorypiacek/SharkTrackKit.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		8A9F03052FEBD4A000000001 /* XCLocalSwiftPackageReference "Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Core;
 		};
-/* End XCRemoteSwiftPackageReference section */
+		8A9F030E2FEBD4A000000001 /* XCLocalSwiftPackageReference "UI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = UI;
+		};
+		8A9F030F2FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/PAM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Modules/PAM;
+		};
+		8A9F03102FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/BRUV" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Modules/BRUV;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		8A9F02062FEBD4A000000001 /* SharkTrackKit */ = {
+		8A9F03062FEBD4A000000001 /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8A9F02052FEBD4A000000001 /* XCRemoteSwiftPackageReference "SharkTrackKit" */;
-			productName = SharkTrackKit;
+			package = 8A9F03052FEBD4A000000001 /* XCLocalSwiftPackageReference "Core" */;
+			productName = Core;
+		};
+		8A9F03082FEBD4A000000001 /* UI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8A9F030E2FEBD4A000000001 /* XCLocalSwiftPackageReference "UI" */;
+			productName = UI;
+		};
+		8A9F030A2FEBD4A000000001 /* PAM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8A9F030F2FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/PAM" */;
+			productName = PAM;
+		};
+		8A9F030C2FEBD4A000000001 /* BRUV */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8A9F03102FEBD4A000000001 /* XCLocalSwiftPackageReference "Modules/BRUV" */;
+			productName = BRUV;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -6,26 +6,27 @@
 //
 
 import SwiftUI
+import Core
 
-struct HighlightMetric: Identifiable, Equatable {
-    let id = UUID()
-    let title: String
-    let value: String
-    let valueColor: Color
+public struct HighlightMetric: Identifiable, Equatable {
+    public let id = UUID()
+    public let title: String
+    public let value: String
+    public let valueColor: Color
 
-    init(_ title: String, _ value: String, valueColor: Color = .primary) {
+    public init(_ title: String, _ value: String, valueColor: Color = .primary) {
         self.title = title
         self.value = value
         self.valueColor = valueColor
     }
 }
 
-struct HighlightBlockView: View {
-    let count: String
-    let title: String
-    let metrics: [HighlightMetric]
+public struct HighlightBlockView: View {
+    public let count: String
+    public let title: String
+    public let metrics: [HighlightMetric]
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.large) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {

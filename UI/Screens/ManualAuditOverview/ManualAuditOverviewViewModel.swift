@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Core
 import SwiftData
 
 /// Defines state and commands for the manual-audit overview screen.
@@ -33,7 +34,7 @@ protocol ManualAuditOverviewViewModelType: AnyObject {
 /// View model for manual-audit overview state and workflow transitions.
 @MainActor
 @Observable
-class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
+open class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
     /// Identifier of the project represented by this overview.
     private let projectID: UUID
     /// Service used to load the scan summary for overview metrics.
@@ -47,13 +48,13 @@ class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
     private(set) var errorMessage: String?
 
     /// Creates a ViewModel for a specific project overview.
-    init(projectID: UUID, projectScanService: ProjectScanServicing) {
+    public init(projectID: UUID, projectScanService: ProjectScanServicing) {
         self.projectID = projectID
         self.projectScanService = projectScanService
     }
 
     /// Loads the project and its scan summary from app persistence.
-    func load(modelContext: ModelContext) {
+    open func load(modelContext: ModelContext) {
         guard let project = fetchProject(modelContext: modelContext) else {
             self.project = nil
             summary = nil
@@ -73,7 +74,7 @@ class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
     }
 
     /// Builds the deterministic presentation model for current persisted audit decisions.
-    func overviewModel(modelContext: ModelContext) -> ManualAuditOverviewPresentation? {
+    public func overviewModel(modelContext: ModelContext) -> ManualAuditOverviewPresentation? {
         guard let project, let summary else { return nil }
         return ManualAuditOverviewPresentation(
             project: project,
@@ -83,7 +84,7 @@ class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
         )
     }
 
-    func overviewConfiguration(
+    open func overviewConfiguration(
         project: Project,
         summary: ProjectScanSummary
     ) -> ManualAuditOverviewPresentation.Configuration {
@@ -91,7 +92,7 @@ class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
     }
 
     /// Applies the primary overview action and delegates navigation to the coordinator.
-    func completePrimaryAction(
+    open func completePrimaryAction(
         modelContext: ModelContext,
         overview: ManualAuditOverviewPresentation,
         coordinator: AppCoordinating
@@ -109,14 +110,14 @@ class ManualAuditOverviewViewModel: ManualAuditOverviewViewModelType {
 
         project.workflowStatus = opensCompletion
             ? .completed
-            : .processingProjectCreated
+            : .created
         project.lastOpenedAt = .now
         try modelContext.save()
 
         coordinator.goToNextStep(for: project)
     }
 
-    func inProgressStatus(for overview: ManualAuditOverviewPresentation) -> ProjectWorkflowStatus {
+    open func inProgressStatus(for overview: ManualAuditOverviewPresentation) -> ProjectWorkflowStatus {
         .inProgress
     }
 

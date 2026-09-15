@@ -6,6 +6,8 @@
 //
 
 import AVFoundation
+import UI
+import Core
 import Foundation
 
 /// Analyzes PAM audio files discovered by the shared project scanner.
@@ -67,22 +69,22 @@ struct PAMAudioScanAnalyzer: ProjectScanAnalyzing {
     nonisolated func warnings(files: [ProjectScanFile], totalSizeBytes: Int) -> [String] {
         var warnings: [String] = []
         if files.isEmpty {
-            warnings.append(Strings.ProjectScan.noWAVFilesFound)
+            warnings.append(PAMStrings.ScanWarnings.noAudioFilesFound)
         }
         if files.contains(where: { !$0.readable }) {
-            warnings.append(Strings.ProjectScan.unreadableFilesFound)
+            warnings.append(PAMStrings.ScanWarnings.unreadableFilesFound)
         }
         if Set(files.compactMap(\.sampleRateHz)).count > 1 {
-            warnings.append(Strings.ProjectScan.multipleSampleRatesFound)
+            warnings.append(PAMStrings.ScanWarnings.multipleSampleRatesFound)
         }
         if files.contains(where: { $0.qualityReasons.contains("CLIPPING_OR_NEAR_CLIPPING") || $0.qualityReasons.contains("MANY_CLIPPED_SAMPLES") }) {
-            warnings.append(Strings.ProjectScan.clippedFilesFound)
+            warnings.append(PAMStrings.ScanWarnings.clippedFilesFound)
         }
         if files.contains(where: { $0.qualityReasons.contains("MOSTLY_NEAR_ZERO") || $0.qualityReasons.contains("VERY_LOW_LEVEL") }) {
-            warnings.append(Strings.ProjectScan.nearlyEmptyFilesFound)
+            warnings.append(PAMStrings.ScanWarnings.nearlyEmptyFilesFound)
         }
         if totalSizeBytes >= 10 * 1024 * 1024 * 1024 || files.count >= 500 {
-            warnings.append("This batch is large and may take a while.")
+            warnings.append(PAMStrings.ScanWarnings.largeBatch)
         }
         return warnings
     }

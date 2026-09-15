@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import Observation
 import SwiftData
 
@@ -40,7 +42,7 @@ final class PAMGuardWaitingViewModel: PAMGuardWaitingViewModelType {
 
     /// Persists the workflow transition after the user confirms the PAMGuard run is finished.
     func confirmRunFinished(project: Project, modelContext: ModelContext, workflowActions: WorkflowActionHandling) {
-        project.workflowStatus = .processingRunImported
+        project.workflowStatus = .processingProjectCreated
         project.lastOpenedAt = .now
         try? modelContext.save()
         workflowActions.goToNextStep(for: project)

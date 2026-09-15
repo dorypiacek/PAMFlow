@@ -6,6 +6,8 @@
 //
 
 import SwiftData
+import UI
+import Core
 import SwiftUI
 
 /// Renders the waiting state while the user runs the generated PAMGuard template.

@@ -6,52 +6,89 @@
 //
 
 import Foundation
+import Core
 
 /// Testable, view-ready state for the manual audit overview screen.
 ///
 /// `ManualAuditOverviewView` should render this as a snapshot rather than recalculate
 /// audit counts, species summaries, and media grouping directly in SwiftUI.
-struct ManualAuditOverviewPresentation {
+public struct ManualAuditOverviewPresentation {
     /// One grouped breakdown row shown in expandable overview cards.
-    struct CountRow: Identifiable, Equatable {
-        let name: String
-        let total: Int
-        let confirmed: Int
+    public struct CountRow: Identifiable, Equatable {
+        public let name: String
+        public let total: Int
+        public let confirmed: Int
 
-        var id: String { name }
-        var progressText: String { "\(confirmed)/\(total)" }
+        public var id: String { name }
+        public var progressText: String { "\(confirmed)/\(total)" }
     }
 
     /// One species count row shown in the species summary card.
-    struct SpeciesRow: Identifiable, Equatable {
-        let species: String
-        let count: Int
+    public struct SpeciesRow: Identifiable, Equatable {
+        public let species: String
+        public let count: Int
 
-        var id: String { species }
+        public var id: String { species }
     }
 
     /// One label/value metric rendered in the overview details card.
-    struct Metric: Identifiable, Equatable {
-        let title: String
-        let value: String
+    public struct Metric: Identifiable, Equatable {
+        public let title: String
+        public let value: String
 
-        var id: String { "\(title)-\(value)" }
+        public var id: String { "\(title)-\(value)" }
+
+        public init(title: String, value: String) {
+            self.title = title
+            self.value = value
+        }
     }
 
     /// Module-provided copy and metric hooks for rendering an overview.
-    struct Configuration {
-        let title: String
-        let subtitle: String
-        let showsSpeciesBreakdown: Bool
-        let countBreakdownTitle: String
-        let readyMetricTitle: String
-        let incompletePrimaryActionTitle: String
-        let completePrimaryActionTitle: String
-        let incompletePrimaryActionHelp: String
-        let completePrimaryActionHelp: String
-        let opensCompletionWhenComplete: Bool
-        let countGroupName: (ProjectScanFile) -> String
-        let detailMetrics: (Project, ProjectScanSummary, [ManualAuditDecision]) -> [Metric]
+    public struct Configuration: @unchecked Sendable {
+        public let title: String
+        public let subtitle: String
+        public let showsSpeciesBreakdown: Bool
+        public let countBreakdownTitle: String
+        public let readyMetricTitle: String
+        public let incompletePrimaryActionTitle: String
+        public let completePrimaryActionTitle: String
+        public let secondaryActionTitle: String?
+        public let incompletePrimaryActionHelp: String
+        public let completePrimaryActionHelp: String
+        public let opensCompletionWhenComplete: Bool
+        public let countGroupName: (ProjectScanFile) -> String
+        public let detailMetrics: (Project, ProjectScanSummary, [ManualAuditDecision]) -> [Metric]
+
+        public init(
+            title: String,
+            subtitle: String,
+            showsSpeciesBreakdown: Bool,
+            countBreakdownTitle: String,
+            readyMetricTitle: String,
+            incompletePrimaryActionTitle: String,
+            completePrimaryActionTitle: String,
+            secondaryActionTitle: String? = Strings.ManualAuditOverview.backToAudit,
+            incompletePrimaryActionHelp: String,
+            completePrimaryActionHelp: String,
+            opensCompletionWhenComplete: Bool,
+            countGroupName: @escaping (ProjectScanFile) -> String,
+            detailMetrics: @escaping (Project, ProjectScanSummary, [ManualAuditDecision]) -> [Metric]
+        ) {
+            self.title = title
+            self.subtitle = subtitle
+            self.showsSpeciesBreakdown = showsSpeciesBreakdown
+            self.countBreakdownTitle = countBreakdownTitle
+            self.readyMetricTitle = readyMetricTitle
+            self.incompletePrimaryActionTitle = incompletePrimaryActionTitle
+            self.completePrimaryActionTitle = completePrimaryActionTitle
+            self.secondaryActionTitle = secondaryActionTitle
+            self.incompletePrimaryActionHelp = incompletePrimaryActionHelp
+            self.completePrimaryActionHelp = completePrimaryActionHelp
+            self.opensCompletionWhenComplete = opensCompletionWhenComplete
+            self.countGroupName = countGroupName
+            self.detailMetrics = detailMetrics
+        }
 
         static let generic = Configuration(
             title: Strings.ManualAuditOverview.title,
@@ -86,13 +123,13 @@ struct ManualAuditOverviewPresentation {
         )
     }
 
-    let project: Project
-    let summary: ProjectScanSummary
-    let decisions: [ManualAuditDecision]
-    let configuration: Configuration
+    public let project: Project
+    public let summary: ProjectScanSummary
+    public let decisions: [ManualAuditDecision]
+    public let configuration: Configuration
 
     /// Creates a deterministic overview snapshot from persisted scan and audit data.
-    init(
+    public init(
         project: Project,
         summary: ProjectScanSummary,
         decisions allDecisions: [ManualAuditDecision],
@@ -108,57 +145,60 @@ struct ManualAuditOverviewPresentation {
         )
     }
 
-    var reviewedCount: Int { decisions.count }
-    var totalCount: Int { summary.files.count }
-    var validCount: Int { decisionCount(.valid) }
-    var invalidCount: Int { decisionCount(.invalid) }
-    var remainingCount: Int { max(totalCount - reviewedCount, 0) }
-    var confirmedDetectionCount: Int { confirmedDecisions.count }
-    var isComplete: Bool { totalCount == 0 || reviewedCount == totalCount }
-    var showsSpeciesBreakdown: Bool {
+    public var reviewedCount: Int { decisions.count }
+    public var totalCount: Int { summary.files.count }
+    public var validCount: Int { decisionCount(.valid) }
+    public var invalidCount: Int { decisionCount(.invalid) }
+    public var remainingCount: Int { max(totalCount - reviewedCount, 0) }
+    public var confirmedDetectionCount: Int { confirmedDecisions.count }
+    public var isComplete: Bool { totalCount == 0 || reviewedCount == totalCount }
+    public var showsSpeciesBreakdown: Bool {
         configuration.showsSpeciesBreakdown
     }
-    var countBreakdownTitle: String {
+    public var countBreakdownTitle: String {
         configuration.countBreakdownTitle
     }
-    var countBreakdownRows: [CountRow] {
+    public var countBreakdownRows: [CountRow] {
         groupedRows(named: configuration.countGroupName)
     }
-    var readyMetricTitle: String {
+    public var readyMetricTitle: String {
         configuration.readyMetricTitle
     }
-    var readyMetricValue: String {
+    public var readyMetricValue: String {
         isComplete ? Strings.Common.yes : Strings.Common.notYet
     }
-    var title: String {
+    public var title: String {
         configuration.title
     }
-    var subtitle: String {
+    public var subtitle: String {
         configuration.subtitle
     }
-    var primaryActionTitle: String {
+    public var primaryActionTitle: String {
         if !isComplete {
             return configuration.incompletePrimaryActionTitle
         }
         return configuration.completePrimaryActionTitle
     }
-    var primaryActionHelp: String {
+    public var primaryActionHelp: String {
         if !isComplete {
             return configuration.incompletePrimaryActionHelp
         }
         return configuration.completePrimaryActionHelp
     }
-    var opensCompletionFromPrimaryAction: Bool {
+    public var secondaryActionTitle: String? {
+        configuration.secondaryActionTitle
+    }
+    public var opensCompletionFromPrimaryAction: Bool {
         isComplete && configuration.opensCompletionWhenComplete
     }
 
     /// Metrics shown in the details card for the current workflow stage.
-    var detailMetrics: [Metric] {
+    public var detailMetrics: [Metric] {
         configuration.detailMetrics(project, summary, decisions)
     }
 
     /// Species counts for valid, exportable detections.
-    var speciesRows: [SpeciesRow] {
+    public var speciesRows: [SpeciesRow] {
         let counts = confirmedDecisions.reduce(into: [String: Int]()) { partialResult, decision in
             for species in preferredSpeciesNames(for: decision) {
                 partialResult[species, default: 0] += 1
@@ -176,7 +216,7 @@ struct ManualAuditOverviewPresentation {
     }
 
     /// Counts matching a decision value.
-    func decisionCount(_ value: ManualAuditDecisionValue) -> Int {
+    public func decisionCount(_ value: ManualAuditDecisionValue) -> Int {
         decisions.filter { $0.decision == value }.count
     }
 
@@ -224,7 +264,7 @@ struct ManualAuditOverviewPresentation {
         return species.map { [$0] } ?? []
     }
 
-    static func uniqueValues(_ values: [String]) -> [String] {
+    public static func uniqueValues(_ values: [String]) -> [String] {
         Array(Set(values)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 

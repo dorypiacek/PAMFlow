@@ -6,6 +6,8 @@
 //
 
 import SwiftData
+import UI
+import Core
 import SwiftUI
 
 /// Renders PAMGuard import progress while its ViewModel owns detection processing.

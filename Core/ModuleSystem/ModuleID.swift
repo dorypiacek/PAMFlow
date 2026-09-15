@@ -10,16 +10,16 @@ import Foundation
 ///
 /// Core stores module IDs as opaque values. Feature modules own the meaning of
 /// their IDs and any workflow state associated with them.
-struct ModuleID: RawRepresentable, Codable, Hashable, Sendable {
-    let rawValue: String
+public struct ModuleID: RawRepresentable, Codable, Hashable, Sendable {
+    public let rawValue: String
 
-    init(rawValue: String) {
+    public init(rawValue: String) {
         self.rawValue = rawValue
     }
 }
 
 extension ModuleID: ExpressibleByStringLiteral {
-    init(stringLiteral value: String) {
+    public init(stringLiteral value: String) {
         self.init(rawValue: value)
     }
 }

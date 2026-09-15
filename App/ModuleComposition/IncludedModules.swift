@@ -4,7 +4,17 @@
 //
 //  Created by Dory on 12/09/2026.
 //
+import Core
 import Foundation
+import UI
+
+#if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_BRUV
+import BRUV
+#endif
+
+#if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_PAM
+import PAM
+#endif
 
 /// Build-composition entry point for feature modules included in this app.
 @MainActor
@@ -39,12 +49,16 @@ struct StaticIncludedModuleProvider: IncludedModuleProviding {
 
     private func makeModule(for projectType: IncludedProjectType) -> FeatureModule {
         switch projectType {
+        #if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_PAM
         case .pam:
             PAMWorkflowModule()
+        #endif
+        #if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_BRUV
         case .bruv:
             BRUVWorkflowModule(projectType: .bruv)
         case .ruv:
             BRUVWorkflowModule(projectType: .ruv)
+        #endif
         }
     }
 
@@ -52,7 +66,11 @@ struct StaticIncludedModuleProvider: IncludedModuleProviding {
 
 /// Project types compiled into the app target.
 enum IncludedProjectType: CaseIterable {
+    #if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_PAM
     case pam
+    #endif
+    #if !PAMFLOW_CUSTOM_MODULE_SELECTION || PAMFLOW_INCLUDE_BRUV
     case bruv
     case ruv
+    #endif
 }

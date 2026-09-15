@@ -6,19 +6,27 @@
 //
 
 import SwiftData
+import Core
 import SwiftUI
 
 /// Renders scan progress for a project while the injected ViewModel owns scanning and cleanup.
-struct ScanProjectView: View {
+public struct ScanProjectView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(\.appCoordinator) private var appCoordinator
 
-    let projectID: UUID
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
+
+    public let projectID: UUID
 
     @State private var viewModel: ScanProjectViewModel
 
     /// Creates a scan screen for a project using module-provided scan behavior.
-    init(
+    public init(
         projectID: UUID,
         supportedFileExtensions: Set<String>,
         scanAnalyzer: ProjectScanAnalyzing
@@ -31,7 +39,7 @@ struct ScanProjectView: View {
         ))
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
@@ -58,14 +66,14 @@ struct ScanProjectView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
         .task {
-            await viewModel.scanProject(modelContext: modelContext, appCoordinator: appCoordinator)
+            await viewModel.scanProject(modelContext: modelContext, coordinator: coordinator)
         }
         .alert(
             Strings.ScanProject.cancelTitle,
             isPresented: $viewModel.showsCancelWarning,
         ) {
             Button(Strings.ScanProject.cancelConfirmButton, role: .destructive) {
-                viewModel.removeProjectAndReturnToSetup(modelContext: modelContext, appCoordinator: appCoordinator)
+                viewModel.removeProjectAndReturnToSetup(modelContext: modelContext, coordinator: coordinator)
             }
 
             Button(Strings.ScanProject.cancelDismissButton, role: .cancel) {}

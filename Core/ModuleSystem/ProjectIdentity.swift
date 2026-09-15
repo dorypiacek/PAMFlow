@@ -8,19 +8,19 @@
 import Foundation
 
 /// Lightweight project identity passed across module boundaries.
-struct ProjectIdentity: Hashable, Sendable {
-    let id: UUID
-    let moduleID: ModuleID
-    let name: String
+public struct ProjectIdentity: Hashable, Sendable {
+    public let id: UUID
+    public let moduleID: ModuleID
+    public let name: String
 
-    init(id: UUID, moduleID: ModuleID, name: String) {
+    public init(id: UUID, moduleID: ModuleID, name: String) {
         self.id = id
         self.moduleID = moduleID
         self.name = name
     }
 }
 
-extension ProjectIdentity {
+public extension ProjectIdentity {
     init(project: Project) {
         self.init(
             id: project.id,

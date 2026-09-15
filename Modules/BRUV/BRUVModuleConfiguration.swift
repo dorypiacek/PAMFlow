@@ -6,12 +6,14 @@
 //
 
 import Foundation
+import UI
+import Core
 
 /// Configuration for visual projects, including BRUV video and RUV image workflows.
 @MainActor
 enum BRUVModuleConfiguration {
-    static let bruvModuleID = ModuleID(rawValue: "bruv_video")
-    static let ruvModuleID = ModuleID(rawValue: "ruv_images")
+    nonisolated static let bruvModuleID = ModuleID(rawValue: "bruv_video")
+    nonisolated static let ruvModuleID = ModuleID(rawValue: "ruv_images")
 
     static let files = ModuleFileConfiguration(
         generatedArtifactFolderNames: [
@@ -113,9 +115,29 @@ enum BRUVModuleConfiguration {
 }
 
 /// Visual project types served by this module.
-enum BRUVProjectType: Sendable {
+public enum BRUVProjectType: Sendable {
     case bruv
     case ruv
+
+    var id: String {
+        switch self {
+        case .bruv:
+            BRUVModuleConfiguration.bruvModuleID.rawValue
+        case .ruv:
+            BRUVModuleConfiguration.ruvModuleID.rawValue
+        }
+    }
+
+    init?(moduleID: String) {
+        switch ModuleID(rawValue: moduleID) {
+        case BRUVModuleConfiguration.bruvModuleID:
+            self = .bruv
+        case BRUVModuleConfiguration.ruvModuleID:
+            self = .ruv
+        default:
+            return nil
+        }
+    }
 }
 
 /// Metadata identifiers owned by the visual module.

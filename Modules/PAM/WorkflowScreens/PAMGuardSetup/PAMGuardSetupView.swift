@@ -6,6 +6,8 @@
 //
 
 import SwiftData
+import UI
+import Core
 import SwiftUI
 
 /// Renders PAMGuard setup controls while its ViewModel prepares the external project package.

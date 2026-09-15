@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension Array where Element: Hashable {
+public extension Array where Element: Hashable {
     func uniquedForDisplay() -> [Element] {
         var seen = Set<Element>()
         return filter { seen.insert($0).inserted }
@@ -15,7 +15,7 @@ extension Array where Element: Hashable {
     }
 }
 
-extension Array where Element == String {
+public extension Array where Element == String {
     func uniqueStrings() -> [String] {
         var seen = Set<String>()
         return filter { value in
@@ -24,7 +24,7 @@ extension Array where Element == String {
     }
 }
 
-extension Array where Element == URL {
+public extension Array where Element == URL {
     func uniqueStandardizedURLs() -> [URL] {
         var seen = Set<String>()
         return filter { url in

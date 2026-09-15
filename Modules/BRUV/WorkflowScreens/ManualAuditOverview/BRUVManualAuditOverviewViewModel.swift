@@ -6,8 +6,11 @@
 //
 
 import Foundation
+import UI
+import Core
+import SwiftData
 
-/// Manual-audit overview behavior for visual detections.
+/// Detection overview behavior for visual detections.
 @MainActor
 @Observable
 final class BRUVManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
@@ -18,14 +21,35 @@ final class BRUVManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
         Self.visualConfiguration
     }
 
+    override func inProgressStatus(for overview: ManualAuditOverviewPresentation) -> ProjectWorkflowStatus {
+        .manualAuditInProgress
+    }
+
+    override func completePrimaryAction(
+        modelContext: ModelContext,
+        overview: ManualAuditOverviewPresentation,
+        coordinator: AppCoordinating
+    ) throws {
+        if !overview.isComplete {
+            try super.completePrimaryAction(modelContext: modelContext, overview: overview, coordinator: coordinator)
+            return
+        }
+
+        overview.project.workflowStatus = .completed
+        overview.project.lastOpenedAt = .now
+        try modelContext.save()
+        coordinator.continueProject(overview.project)
+    }
+
     private static let visualConfiguration = ManualAuditOverviewPresentation.Configuration(
         title: Strings.ManualAuditOverview.frameReviewTitle,
         subtitle: Strings.ManualAuditOverview.subtitle,
         showsSpeciesBreakdown: true,
-        countBreakdownTitle: Strings.ManualAuditOverview.detectionsByVideo,
+        countBreakdownTitle: BRUVStrings.ProjectOverview.detectionsByVideo,
         readyMetricTitle: Strings.ManualAuditOverview.readyForExport,
         incompletePrimaryActionTitle: Strings.ManualAuditOverview.reviewDetections,
         completePrimaryActionTitle: Strings.ManualAuditOverview.continueToReport,
+        secondaryActionTitle: nil,
         incompletePrimaryActionHelp: Strings.ManualAuditOverview.reviewDetectionsHelp,
         completePrimaryActionHelp: Strings.ManualAuditOverview.reportHelp,
         opensCompletionWhenComplete: true,
@@ -37,7 +61,7 @@ final class BRUVManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
             ]
             let sourceVideos = ManualAuditOverviewPresentation.uniqueValues(summary.files.map(sourceMediaDisplayName(for:)))
             if !sourceVideos.isEmpty {
-                metrics.append(ManualAuditOverviewPresentation.Metric(title: Strings.ManualAuditOverview.processedVideos, value: "\(sourceVideos.count)"))
+                metrics.append(ManualAuditOverviewPresentation.Metric(title: BRUVStrings.ProjectOverview.processedVideos, value: "\(sourceVideos.count)"))
             }
             let formats = ManualAuditOverviewPresentation.uniqueValues(summary.files.compactMap(\.format))
             if !formats.isEmpty {
@@ -55,7 +79,7 @@ final class BRUVManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
         }
     )
 
-    private static func sourceMediaDisplayName(for file: ProjectScanFile) -> String {
+    nonisolated private static func sourceMediaDisplayName(for file: ProjectScanFile) -> String {
         if let sourceVideo = file.sourceVideo, !sourceVideo.isEmpty {
             return sourceVideo
         }
@@ -69,7 +93,7 @@ final class BRUVManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
         return isGeneratedVisualOutputName(file.fileName) ? Strings.Common.unknown : file.fileName
     }
 
-    private static func isGeneratedVisualOutputName(_ name: String) -> Bool {
+    nonisolated private static func isGeneratedVisualOutputName(_ name: String) -> Bool {
         let lowercased = name.lowercased()
         return lowercased.contains("elasmobranch") || lowercased.contains("sharktrack")
     }

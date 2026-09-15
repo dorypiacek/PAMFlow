@@ -6,20 +6,28 @@
 //
 
 import SwiftData
+import Core
 import SwiftUI
 
 /// Renders scan-summary readiness and forwards overview actions to its ViewModel.
-struct NewProjectOverviewView: View {
+public struct NewProjectOverviewView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(\.appCoordinator) private var appCoordinator
 
-    let projectID: UUID
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
+
+    public let projectID: UUID
 
     @State private var viewModel: NewProjectOverviewViewModel
     @State private var showsBackToSetupWarning = false
     @State private var showsBackToScanWarning = false
 
-    init(
+    public init(
         projectID: UUID,
         viewModel: NewProjectOverviewViewModel
     ) {
@@ -27,7 +35,7 @@ struct NewProjectOverviewView: View {
         _viewModel = State(initialValue: viewModel)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView {
                 handleBackNavigation()
@@ -76,10 +84,10 @@ struct NewProjectOverviewView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: Spacing.small) {
-                Text(Strings.NewProjectOverview.title)
+                Text(viewModel.screenTitle)
                     .font(Fonts.screenTitle)
 
-                Text(Strings.NewProjectOverview.subtitle)
+                Text(viewModel.screenSubtitle)
                     .foregroundStyle(.secondary)
             }
 
@@ -164,7 +172,7 @@ struct NewProjectOverviewView: View {
 
             if presentation.canSkipManualAudit {
                 Button(Strings.NewProjectOverview.skipManualAuditButton) {
-                    viewModel.skipManualAudit(project: presentation.project, modelContext: modelContext, coordinator: appCoordinator)
+                    viewModel.skipManualAudit(project: presentation.project, modelContext: modelContext, coordinator: coordinator)
                 }
                 .buttonStyle(.secondaryAction)
                 .help(Strings.NewProjectOverview.skipManualAuditHelp)
@@ -261,16 +269,16 @@ private extension NewProjectOverviewView {
 
     @MainActor
     func performPrimaryAction(for project: Project) async {
-        viewModel.performPrimaryAction(project: project, modelContext: modelContext, coordinator: appCoordinator)
+        viewModel.performPrimaryAction(project: project, modelContext: modelContext, coordinator: coordinator)
     }
 
     func handleBackNavigation() {
         guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
-            viewModel.goBack(coordinator: appCoordinator)
+            viewModel.goBack(coordinator: coordinator)
             return
         }
 
-        if viewModel.hasGeneratedArtifacts(for: project, moduleCatalog: appCoordinator.moduleCatalog) ||
+        if viewModel.hasGeneratedArtifacts(for: project, moduleCatalog: coordinator.moduleCatalog) ||
             viewModel.auditDecisionCount(for: project, modelContext: modelContext) > 0 {
             showsBackToSetupWarning = true
         } else {
@@ -280,19 +288,19 @@ private extension NewProjectOverviewView {
 
     func removeProjectAndReturnToSetup() {
         guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
-            viewModel.openProjectSelection(coordinator: appCoordinator)
+            viewModel.openProjectSelection(coordinator: coordinator)
             return
         }
 
-        viewModel.removeProjectAndReturnToSetup(project: project, modelContext: modelContext, coordinator: appCoordinator)
+        viewModel.removeProjectAndReturnToSetup(project: project, modelContext: modelContext, coordinator: coordinator)
     }
 
     func removeAuditProgressAndGoBackToScan() {
         guard let project = viewModel.fetchProject(projectID, modelContext: modelContext) else {
-            viewModel.goBack(coordinator: appCoordinator)
+            viewModel.goBack(coordinator: coordinator)
             return
         }
 
-        viewModel.removeAuditProgressAndGoBackToScan(project: project, modelContext: modelContext, coordinator: appCoordinator)
+        viewModel.removeAuditProgressAndGoBackToScan(project: project, modelContext: modelContext, coordinator: coordinator)
     }
 }

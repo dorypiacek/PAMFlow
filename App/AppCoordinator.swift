@@ -6,40 +6,9 @@
 //
 
 import Foundation
+import Core
 import Observation
-
-/// Navigation and global app actions exposed to feature models.
-@MainActor
-protocol AppCoordinating: AnyObject {
-    var userProfile: UserProfile? { get }
-    var route: AppRoute { get set }
-    var selectedTheme: AppTheme { get set }
-    var settingsErrorMessage: String? { get set }
-    var dependencies: Dependencies { get }
-    var moduleCatalog: ModuleCatalog { get }
-    var canGoBack: Bool { get }
-    var canGoHome: Bool { get }
-
-    @discardableResult
-    func saveUserName(_ name: String) -> Bool
-    func signOut()
-    func selectTheme(_ theme: AppTheme)
-    func openDataTypeSelection()
-    func openModule(moduleID: ModuleID)
-    func openProjectSelection()
-    func goHome()
-    func goBack()
-    func goToNextStep(for project: Project, startAtLastReviewed: Bool)
-    func goToPreviousStep(for project: Project)
-    func openReadOnlyProject(_ project: Project)
-    func continueProject(_ project: Project)
-}
-
-extension AppCoordinating {
-    func goToNextStep(for project: Project) {
-        goToNextStep(for: project, startAtLastReviewed: false)
-    }
-}
+import UI
 
 @Observable
 @MainActor
@@ -56,7 +25,7 @@ final class AppCoordinator: AppCoordinating, WorkflowActionHandling {
     var activeModuleCoordinator: ModuleCoordinating?
     var workflowRevision = 0
 
-    let dependencies: Dependencies
+    let dependencies: any SharedAppDependencies
 
     private let userProfileStore: UserProfileStoring
     private let appThemeStore: AppThemeStoring
@@ -65,7 +34,7 @@ final class AppCoordinator: AppCoordinating, WorkflowActionHandling {
     init(
         userProfileStore: UserProfileStoring,
         appThemeStore: AppThemeStoring,
-        dependencies: Dependencies,
+        dependencies: any SharedAppDependencies,
         moduleCatalog: ModuleCatalog
     ) {
         self.userProfileStore = userProfileStore

@@ -8,37 +8,37 @@
 import Foundation
 
 /// Common file values discovered by the shared project scanner before module-specific analysis.
-struct ProjectScanFileInfo: Sendable {
+public struct ProjectScanFileInfo: Sendable {
     /// Absolute URL for the discovered source file.
-    let url: URL
+    public let url: URL
     /// Root folder used to calculate the file's relative path.
-    let inputFolderURL: URL
+    public let inputFolderURL: URL
     /// Display name of the discovered source file.
-    let fileName: String
+    public let fileName: String
     /// Path from the selected input folder to the discovered file.
-    let relativePath: String
+    public let relativePath: String
     /// File size in bytes, resolving symbolic links when needed.
-    let sizeBytes: Int
+    public let sizeBytes: Int
     /// Uppercased file extension used in persisted scan summaries.
-    let format: String
+    public let format: String
 }
 
 /// File inventory produced by Core before a feature module performs media-specific analysis.
-struct ProjectScanInventory: Sendable {
+public struct ProjectScanInventory: Sendable {
     /// Security-scoped project root used for writing the scan summary.
-    let projectRootURL: URL
+    public let projectRootURL: URL
     /// Input folder selected for scanning.
-    let inputFolderURL: URL
+    public let inputFolderURL: URL
     /// User-facing input folder path preserved in the summary.
-    let displayInputFolderURL: URL
+    public let displayInputFolderURL: URL
     /// Optional recorder identifier copied from generic project metadata.
-    let recorderID: String
+    public let recorderID: String
     /// Files discovered by Core using the module's supported extension list.
-    let files: [ProjectScanFileInfo]
+    public let files: [ProjectScanFileInfo]
 }
 
 /// Module-owned analysis for files discovered by the shared scanner.
-protocol ProjectScanAnalyzing: Sendable {
+public protocol ProjectScanAnalyzing: Sendable {
     /// Converts one discovered file into a persisted scan record.
     nonisolated func analyzeFile(_ fileInfo: ProjectScanFileInfo) async -> ProjectScanFile
     /// Builds module-owned summary attributes from analyzed scan records.
@@ -47,16 +47,16 @@ protocol ProjectScanAnalyzing: Sendable {
     nonisolated func warnings(files: [ProjectScanFile], totalSizeBytes: Int) -> [String]
 }
 
-extension ProjectScanAnalyzing {
+public extension ProjectScanAnalyzing {
     nonisolated func summaryAttributes(files: [ProjectScanFile]) -> [String: ScanAttributeValue] {
         [:]
     }
 }
 
 /// Builds generic fallback scan records for unreadable module files.
-enum ProjectScanFileFactory {
+public enum ProjectScanFileFactory {
     /// Creates a persisted scan record for a file whose module-specific metadata could not be read.
-    nonisolated static func unreadableFile(_ fileInfo: ProjectScanFileInfo, message: String) -> ProjectScanFile {
+    public nonisolated static func unreadableFile(_ fileInfo: ProjectScanFileInfo, message: String) -> ProjectScanFile {
         ProjectScanFile(
             fileName: fileInfo.fileName,
             relativePath: fileInfo.relativePath,

@@ -6,23 +6,10 @@
 //
 
 import Accelerate
+import UI
+import Core
 import AVFoundation
 import Foundation
-
-/// Render-ready waveform and spectrogram data for one audio file.
-struct AudioPreview: Equatable, Sendable {
-    var waveformPeaks: [WaveformPeak]
-    var spectrogramBins: [[Float]]
-    var spectrogramMaxFrequencyHz: Double
-    var durationSeconds: Double
-    var sampleRateHz: Double
-}
-
-/// Minimum and maximum amplitude for a downsampled waveform bucket.
-struct WaveformPeak: Equatable, Sendable {
-    var minimum: Float
-    var maximum: Float
-}
 
 /// Generates waveform and spectrogram previews for audio media.
 protocol AudioPreviewServicing: Sendable {
@@ -39,6 +26,9 @@ protocol AudioPreviewServicing: Sendable {
 /// `Task.detached` while the UI remains responsive.
 final class AudioPreviewService: AudioPreviewServicing {
     private nonisolated static let spectrogramDisplayRangeDB: Float = 60
+    private nonisolated static let previewColumnCount = 1_200
+    private nonisolated static let previewBinCount = 384
+    private nonisolated static let waveformPeakCount = 1_200
 
     enum AudioPreviewError: LocalizedError {
         case unreadableAudio
@@ -73,9 +63,9 @@ final class AudioPreviewService: AudioPreviewServicing {
             )
         }
 
-        let spectrogram = try spectrogram(from: file, columns: 2_400, bins: 768)
+        let spectrogram = try spectrogram(from: file, columns: Self.previewColumnCount, bins: Self.previewBinCount)
         return AudioPreview(
-            waveformPeaks: try waveformEnvelope(from: file, targetCount: 2_400),
+            waveformPeaks: try waveformEnvelope(from: file, targetCount: Self.waveformPeakCount),
             spectrogramBins: spectrogram.bins,
             spectrogramMaxFrequencyHz: spectrogram.maxFrequencyHz,
             durationSeconds: Double(frameCount) / file.processingFormat.sampleRate,
@@ -120,9 +110,9 @@ final class AudioPreviewService: AudioPreviewServicing {
             )
         }
 
-        let spectrogram = try spectrogram(from: samples, sampleRate: sampleRate, columns: 2_400, bins: 768)
+        let spectrogram = try spectrogram(from: samples, sampleRate: sampleRate, columns: Self.previewColumnCount, bins: Self.previewBinCount)
         return AudioPreview(
-            waveformPeaks: waveformEnvelope(from: samples, targetCount: 1_600),
+            waveformPeaks: waveformEnvelope(from: samples, targetCount: Self.waveformPeakCount),
             spectrogramBins: spectrogram.bins,
             spectrogramMaxFrequencyHz: spectrogram.maxFrequencyHz,
             durationSeconds: Double(readFrames) / sampleRate,

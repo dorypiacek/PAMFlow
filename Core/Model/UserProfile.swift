@@ -8,6 +8,10 @@
 import Foundation
 
 /// Local user identity displayed in the top bar.
-struct UserProfile: Codable, Equatable {
-    var name: String
+public struct UserProfile: Codable, Equatable {
+    public var name: String
+
+    public init(name: String) {
+        self.name = name
+    }
 }

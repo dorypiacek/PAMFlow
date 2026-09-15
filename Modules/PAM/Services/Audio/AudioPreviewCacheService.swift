@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 
 /// Cached audio preview loading used by manual-audit screens.
 @MainActor
@@ -30,6 +32,16 @@ protocol AudioPreviewCacheServicing: AnyObject {
         clipDurationSeconds: Double?
     )
 
+    func retainOnly(
+        keys: Set<String>
+    )
+
+    func cacheKey(
+        for url: URL,
+        clipStartSeconds: Double?,
+        clipDurationSeconds: Double?
+    ) -> String
+
     func clear()
 }
 
@@ -47,7 +59,7 @@ final class AudioPreviewCacheService: AudioPreviewCacheServicing {
     private var activeTaskCount = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    init(audioPreviewService: AudioPreviewServicing = AudioPreviewService(), cacheLimit: Int = 3) {
+    init(audioPreviewService: AudioPreviewServicing = AudioPreviewService(), cacheLimit: Int = 11) {
         self.audioPreviewService = audioPreviewService
         self.cacheLimit = cacheLimit
     }
@@ -164,6 +176,17 @@ final class AudioPreviewCacheService: AudioPreviewCacheServicing {
         }
     }
 
+    func retainOnly(keys retainedKeys: Set<String>) {
+        for key in tasks.keys where !retainedKeys.contains(key) {
+            tasks[key]?.cancel()
+            tasks[key] = nil
+        }
+        for key in previews.keys where !retainedKeys.contains(key) {
+            previews[key] = nil
+        }
+        cacheOrder.removeAll { !retainedKeys.contains($0) }
+    }
+
     func clear() {
         for task in tasks.values {
             task.cancel()
@@ -212,7 +235,7 @@ final class AudioPreviewCacheService: AudioPreviewCacheServicing {
         cacheOrder.append(key)
     }
 
-    private func cacheKey(
+    func cacheKey(
         for url: URL,
         clipStartSeconds: Double? = nil,
         clipDurationSeconds: Double? = nil

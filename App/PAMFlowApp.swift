@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import UI
+import Core
 import SwiftData
 
 /// PAMFlow macOS app entry point.
@@ -26,6 +28,7 @@ struct PAMFlowApp: App {
         WindowGroup {
             RootView()
                 .environment(appCoordinator)
+                .environment(\.appCoordinator, appCoordinator)
                 .tint(AppColors.accent)
                 .frame(minWidth: 900, minHeight: 520)
                 .preferredColorScheme(appCoordinator.selectedTheme.colorScheme)

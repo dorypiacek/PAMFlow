@@ -6,17 +6,25 @@
 //
 
 import SwiftData
+import Core
 import SwiftUI
 
 /// Renders module-configured project setup and forwards creation events to its ViewModel.
-struct ProjectSetupView: View {
+public struct ProjectSetupView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(\.appCoordinator) private var appCoordinator
+
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
 
     @State private var viewModel: BaseProjectSetupViewModel
     @State private var isShowingManualMetadata = false
 
-    init(
+    public init(
         viewModel: BaseProjectSetupViewModel
     ) {
         _viewModel = State(
@@ -24,7 +32,7 @@ struct ProjectSetupView: View {
         )
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
@@ -212,7 +220,7 @@ struct ProjectSetupView: View {
 
     private func createProject() {
         guard let project = viewModel.createAndSaveProject(modelContext: modelContext) else { return }
-        appCoordinator.goToNextStep(for: project)
+        coordinator.goToNextStep(for: project)
     }
 
 }
@@ -220,17 +228,17 @@ struct ProjectSetupView: View {
 private typealias ProjectSetupStrings = Strings.ProjectSetup
 
 private struct ProjectMetadataManualEntrySheet: View {
-    let configuration: ProjectSetupConfiguration
+    public let configuration: ProjectSetupConfiguration
     @Binding var values: ProjectMetadataValues
 
-    let onClose: () -> Void
+    public let onClose: () -> Void
     @State private var selectedDates: [String: Date] = [:]
 
     private var canClose: Bool {
         configuration.isMetadataComplete(values)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.medium) {
             HStack {
                 Text(String(format: ProjectSetupStrings.metadataTitleFormat, configuration.module.name))
@@ -241,7 +249,7 @@ private struct ProjectMetadataManualEntrySheet: View {
                 Button {
                     onClose()
                 } label: {
-                    Image(systemName: "xmark")
+                    Image(systemName: Icons.close)
                 }
                 .buttonStyle(.iconAction)
                 .help(Strings.Common.close)

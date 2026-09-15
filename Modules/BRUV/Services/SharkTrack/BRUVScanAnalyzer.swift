@@ -6,6 +6,8 @@
 //
 
 import AVFoundation
+import UI
+import Core
 import Foundation
 import ImageIO
 
@@ -29,25 +31,25 @@ struct BRUVScanAnalyzer: ProjectScanAnalyzing {
     nonisolated func warnings(files: [ProjectScanFile], totalSizeBytes: Int) -> [String] {
         var warnings: [String] = []
         if files.isEmpty {
-            warnings.append(analyzesVideo ? Strings.ProjectScan.noVideoFilesFound : Strings.ProjectScan.noImageFilesFound)
+            warnings.append(analyzesVideo ? BRUVStrings.ScanWarnings.noVideoFilesFound : BRUVStrings.ScanWarnings.noImageFilesFound)
         }
         if files.contains(where: { !$0.readable }) {
-            warnings.append(Strings.ProjectScan.unreadableFilesFound)
+            warnings.append(BRUVStrings.ScanWarnings.unreadableFilesFound)
         }
         if Set(files.compactMap(\.format)).count > 1 {
-            warnings.append("Multiple file formats found.")
+            warnings.append(BRUVStrings.ScanWarnings.multipleFormatsFound)
         }
         if Set(files.compactMap({ file -> String? in
             guard let width = file.width, let height = file.height else { return nil }
             return "\(width)x\(height)"
         })).count > 1 {
-            warnings.append("Multiple resolutions found.")
+            warnings.append(BRUVStrings.ScanWarnings.multipleResolutionsFound)
         }
         if files.contains(where: { $0.qualityReasons.contains("LOW_RESOLUTION") }) {
-            warnings.append("Some files have low resolution.")
+            warnings.append(BRUVStrings.ScanWarnings.lowResolutionFound)
         }
         if totalSizeBytes >= 10 * 1024 * 1024 * 1024 || files.count >= 500 {
-            warnings.append("This batch is large and may take a while.")
+            warnings.append(BRUVStrings.ScanWarnings.largeBatch)
         }
         return warnings
     }
@@ -84,7 +86,7 @@ struct BRUVScanAnalyzer: ProjectScanAnalyzing {
             let width = properties[kCGImagePropertyPixelWidth] as? Int,
             let height = properties[kCGImagePropertyPixelHeight] as? Int
         else {
-            return ProjectScanFileFactory.unreadableFile(fileInfo, message: Strings.ProjectScan.imageMetadataUnreadable)
+            return ProjectScanFileFactory.unreadableFile(fileInfo, message: BRUVStrings.ScanWarnings.imageMetadataUnreadable)
         }
 
         let reasons = imageQualityReasons(width: width, height: height, sizeBytes: fileInfo.sizeBytes)
@@ -119,7 +121,7 @@ struct BRUVScanAnalyzer: ProjectScanAnalyzing {
             let tracks = try await asset.loadTracks(withMediaType: .video)
             durationSeconds = CMTimeGetSeconds(duration)
             guard let firstVideoTrack = tracks.first else {
-                return ProjectScanFileFactory.unreadableFile(fileInfo, message: Strings.ProjectScan.videoTrackUnreadable)
+                return ProjectScanFileFactory.unreadableFile(fileInfo, message: BRUVStrings.ScanWarnings.videoTrackUnreadable)
             }
             videoTrack = firstVideoTrack
         } catch {
@@ -127,7 +129,7 @@ struct BRUVScanAnalyzer: ProjectScanAnalyzing {
         }
 
         guard durationSeconds.isFinite, durationSeconds > 0 else {
-            return ProjectScanFileFactory.unreadableFile(fileInfo, message: Strings.ProjectScan.videoMetadataUnreadable)
+            return ProjectScanFileFactory.unreadableFile(fileInfo, message: BRUVStrings.ScanWarnings.videoMetadataUnreadable)
         }
 
         do {

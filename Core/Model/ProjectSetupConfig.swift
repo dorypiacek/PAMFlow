@@ -8,23 +8,25 @@
 import Foundation
 
 /// Configuration consumed by the shared project setup screen.
-struct ProjectSetupConfiguration {
-    let module: ModuleDetails
-    let usesProjectMetadata: Bool
-    let metadataUploadMessage: String
-    let metadataCacheKey: String
-    let requiredMetadataFields: [ProjectMetadataField]
-    let metadataSelectionFieldID: String?
-    let isMetadataComplete: @MainActor (ProjectMetadataValues) -> Bool
-    let applyMetadata: @MainActor (ProjectMetadataValues, Project) -> Void
+public struct ProjectSetupConfiguration {
+    public let module: ModuleDetails
+    public let usesProjectMetadata: Bool
+    public let metadataUploadMessage: String
+    public let metadataCacheKey: String
+    public let requiredMetadataFields: [ProjectMetadataField]
+    public let metadataSelectionFieldID: String?
+    public let selectableFileExtensions: Set<String>?
+    public let isMetadataComplete: @MainActor (ProjectMetadataValues) -> Bool
+    public let applyMetadata: @MainActor (ProjectMetadataValues, Project) -> Void
 
-    init(
+    public init(
         module: ModuleDetails,
         usesProjectMetadata: Bool = true,
         metadataUploadMessage: String,
         metadataCacheKey: String,
         requiredMetadataFields: [ProjectMetadataField],
         metadataSelectionFieldID: String? = nil,
+        selectableFileExtensions: Set<String>? = nil,
         isMetadataComplete: @escaping @MainActor (ProjectMetadataValues) -> Bool,
         applyMetadata: @escaping @MainActor (ProjectMetadataValues, Project) -> Void
     ) {
@@ -34,6 +36,7 @@ struct ProjectSetupConfiguration {
         self.metadataCacheKey = metadataCacheKey
         self.requiredMetadataFields = requiredMetadataFields
         self.metadataSelectionFieldID = metadataSelectionFieldID
+        self.selectableFileExtensions = selectableFileExtensions
         self.isMetadataComplete = isMetadataComplete
         self.applyMetadata = applyMetadata
     }

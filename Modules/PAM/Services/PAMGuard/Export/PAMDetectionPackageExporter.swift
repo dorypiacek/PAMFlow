@@ -6,6 +6,8 @@
 // 
 
 import AppKit
+import UI
+import Core
 import AVFoundation
 import Foundation
 
@@ -104,45 +106,6 @@ private enum ProjectExportFieldID {
     static let sizeBytes = "size_bytes"
     static let qualityFlag = "quality_flag"
     static let qualityReasons = "quality_reasons"
-}
-
-/// Builds the PAM workflow export package, including sample/event CSV files, per-sample Raven selection tables, and high-resolution event spectrograms.
-struct ProjectExportReport {
-    let project: Project
-    let summary: ProjectScanSummary
-    let decisions: [ManualAuditDecision]
-    let fields: [ProjectExportField]
-    let separator: String
-    let processedBy: String
-
-    var string: String {
-        let decisionsByPath = Dictionary(uniqueKeysWithValues: decisions.map { ($0.fileRelativePath, $0) })
-        let header = fields.map(\.title).map(escape).joined(separator: separator)
-        let rows = summary.files.map { file in
-            let decision = decisionsByPath[file.relativePath]
-            return fields
-                .map { field in
-                    if field.id == ProjectExportField.processedByFieldID {
-                        escape(processedBy)
-                    } else {
-                        escape(field.value(project, file, decision))
-                    }
-                }
-                .joined(separator: separator)
-        }
-        return ([header] + rows).joined(separator: PAMExportSeparators.newline) + PAMExportSeparators.newline
-    }
-
-    private func escape(_ value: String) -> String {
-        if separator == PAMExportSeparators.comma {
-            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
-            return value.contains(PAMExportSeparators.comma) || value.contains(PAMExportSeparators.newline) || value.contains("\"") ? "\"\(escaped)\"" : escaped
-        }
-
-        return value
-            .replacingOccurrences(of: PAMExportSeparators.tab, with: " ")
-            .replacingOccurrences(of: PAMExportSeparators.newline, with: " ")
-    }
 }
 
 struct PAMDetectionPackageExporter {
@@ -588,14 +551,14 @@ struct PAMDetectionPackageExporter {
         return sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? PAMStrings.ExportPackage.fallbackSampleName : sanitized
     }
 
-    private static let isoFormatter: ISO8601DateFormatter = {
+    private static var isoFormatter: ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
-    }()
+    }
 
-    private static let posixNumberFormatter: NumberFormatter = {
+    private static var posixNumberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.numberStyle = .decimal
@@ -603,7 +566,7 @@ struct PAMDetectionPackageExporter {
         formatter.minimumFractionDigits = 0
         formatter.usesGroupingSeparator = false
         return formatter
-    }()
+    }
 }
 
 private struct PAMAudioSource {
@@ -697,232 +660,5 @@ private struct PAMEventRow {
             reviewer,
             notes
         ]
-    }
-}
-
-struct ProjectExportField: Identifiable {
-    static let processedByFieldID = ProjectExportFieldID.processedBy
-
-    let id: String
-    let title: String
-    let modules: Set<WorkflowModule>
-    let value: (Project, ProjectScanFile, ManualAuditDecision?) -> String
-
-    static func available(for module: WorkflowModule) -> [ProjectExportField] {
-        all.filter { $0.modules.contains(module) }
-    }
-
-    static func defaults(for module: WorkflowModule) -> [ProjectExportField] {
-        let defaultIDs: [String]
-        switch module {
-        case .pamAudio:
-            defaultIDs = [
-                ProjectExportFieldID.eventID,
-                ProjectExportFieldID.opcode,
-                ProjectExportFieldID.deploymentDate,
-                ProjectExportFieldID.retrievalDate,
-                ProjectExportFieldID.location,
-                ProjectExportFieldID.depth,
-                ProjectExportFieldID.bottomType,
-                ProjectExportFieldID.fileID,
-                ProjectExportFieldID.eventStartSeconds,
-                ProjectExportFieldID.eventEndSeconds,
-                ProjectExportFieldID.score,
-                ProjectExportFieldID.evidenceTypes,
-                ProjectExportFieldID.sourceMedia,
-                ProjectExportFieldID.clipStartSeconds,
-                ProjectExportFieldID.clipDurationSeconds,
-                ProjectExportFieldID.clickCount,
-                ProjectExportFieldID.clickTrainCount,
-                ProjectExportFieldID.whistleCount,
-                ProjectExportFieldID.decision,
-                ProjectExportFieldID.reason,
-                ProjectExportFieldID.speciesFullName,
-                processedByFieldID
-            ]
-        case .bruvVideo:
-            defaultIDs = [
-                ProjectExportFieldID.fileName,
-                ProjectExportFieldID.sourceMedia,
-                ProjectExportFieldID.opcode,
-                ProjectExportFieldID.deploymentDate,
-                ProjectExportFieldID.location,
-                ProjectExportFieldID.depth,
-                ProjectExportFieldID.bottomType,
-                ProjectExportFieldID.waterTemperature,
-                ProjectExportFieldID.frameNumber,
-                ProjectExportFieldID.trackID,
-                ProjectExportFieldID.decision,
-                ProjectExportFieldID.reason,
-                ProjectExportFieldID.speciesFullName,
-                ProjectExportFieldID.confidence,
-                ProjectExportFieldID.maxN,
-                processedByFieldID
-            ]
-        case .ruvImages:
-            defaultIDs = [
-                ProjectExportFieldID.fileName,
-                ProjectExportFieldID.sourceMedia,
-                ProjectExportFieldID.relativePath,
-                ProjectExportFieldID.opcode,
-                ProjectExportFieldID.deploymentDate,
-                ProjectExportFieldID.location,
-                ProjectExportFieldID.depth,
-                ProjectExportFieldID.bottomType,
-                ProjectExportFieldID.waterTemperature,
-                ProjectExportFieldID.decision,
-                ProjectExportFieldID.reason,
-                ProjectExportFieldID.speciesFullName,
-                ProjectExportFieldID.maxN,
-                ProjectExportFieldID.width,
-                ProjectExportFieldID.height,
-                ProjectExportFieldID.format,
-                processedByFieldID
-            ]
-        }
-
-        return defaultIDs.compactMap { field(id: $0, module: module) }
-    }
-
-    static func includingRequiredDefaults(_ fieldIDs: [String], for module: WorkflowModule) -> [String] {
-        var resolvedFieldIDs = fieldIDs
-        for requiredID in requiredDefaultFieldIDs(for: module) where !resolvedFieldIDs.contains(requiredID) {
-            resolvedFieldIDs.append(requiredID)
-        }
-        return resolvedFieldIDs
-    }
-
-    private static func requiredDefaultFieldIDs(for module: WorkflowModule) -> [String] {
-        switch module {
-        case .pamAudio:
-            [processedByFieldID]
-        case .bruvVideo, .ruvImages:
-            [ProjectExportFieldID.fileName, ProjectExportFieldID.sourceMedia, processedByFieldID]
-        }
-    }
-
-    static func field(id: String, module: WorkflowModule) -> ProjectExportField? {
-        available(for: module).first { $0.id == id }
-    }
-
-    private static let all: [ProjectExportField] = [
-        field(ProjectExportFieldID.eventID, Strings.ExportFields.eventID, modules: [.pamAudio]) { file, _ in eventID(file) },
-        field(ProjectExportFieldID.fileID, Strings.ExportFields.fileID, modules: [.pamAudio]) { file, _ in file.pamSourceMedia ?? metadataValue(file, key: PAMExportMetadataKey.file) },
-        field(ProjectExportFieldID.eventStartSeconds, Strings.ExportFields.eventStartSeconds, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.startTime).replacingOccurrences(of: PAMExportMetadataKey.secondsSuffix, with: "") },
-        field(ProjectExportFieldID.eventEndSeconds, Strings.ExportFields.eventEndSeconds, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.endTime).replacingOccurrences(of: PAMExportMetadataKey.secondsSuffix, with: "") },
-        field(ProjectExportFieldID.score, Strings.ExportFields.score, modules: [.pamAudio]) { file, _ in number(file.pamConfidence).isEmpty ? metadataValue(file, key: Strings.ExportFields.score) : number(file.pamConfidence) },
-        field(ProjectExportFieldID.evidenceTypes, Strings.ExportFields.evidenceTypes, modules: [.pamAudio]) { file, _ in file.format ?? metadataValue(file, key: PAMExportMetadataKey.evidenceTypes) },
-        field(ProjectExportFieldID.detectors, Strings.ExportFields.detectors, modules: [.pamAudio]) { file, _ in metadataValue(file, key: Strings.ExportFields.detectors) },
-        field(ProjectExportFieldID.clickCount, Strings.ExportFields.clickCount, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.clickCount) },
-        field(ProjectExportFieldID.clickBoutCount, Strings.ExportFields.clickBoutCount, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.clickBoutCount) },
-        field(ProjectExportFieldID.clickTrainCount, Strings.ExportFields.clickTrainCount, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.clickTrainCount) },
-        field(ProjectExportFieldID.whistleCount, Strings.ExportFields.whistleCount, modules: [.pamAudio]) { file, _ in metadataValue(file, key: PAMExportMetadataKey.whistleCount) },
-        field(ProjectExportFieldID.qualityFlags, Strings.ExportFields.qualityFlags, modules: [.pamAudio]) { file, _ in file.qualityFlag == PAMGuardPreview.eventQualityFlag ? "" : file.qualityFlag },
-        field(ProjectExportFieldID.reviewStatus, Strings.ExportFields.reviewStatus, modules: [.pamAudio]) { _, decision in decision?.decision.title ?? Strings.Common.unreviewed },
-        field(ProjectExportFieldID.detectionID, Strings.ExportFields.detectionID, modules: [.bruvVideo]) { file, _ in
-            file.trackID.map(String.init) ?? file.relativePath
-        },
-        projectField(ProjectExportFieldID.opcode, Strings.ExportFields.opcode, modules: [.pamAudio, .bruvVideo, .ruvImages]) { $0.metadataValue(for: PAMMetadataFieldID.opcode) ?? $0.metadataValue(for: BRUVMetadataFieldID.opcode) ?? "" },
-        projectField(ProjectExportFieldID.deploymentDate, Strings.ExportFields.dateDeployed, modules: [.pamAudio, .bruvVideo, .ruvImages]) { $0.metadataValue(for: PAMMetadataFieldID.date) ?? $0.metadataValue(for: BRUVMetadataFieldID.date) ?? "" },
-        projectField(ProjectExportFieldID.retrievalDate, Strings.ExportFields.dateRetrieved, modules: [.pamAudio]) { $0.metadataValue(for: PAMMetadataFieldID.dateRetrieved) ?? "" },
-        projectField(ProjectExportFieldID.location, Strings.ExportFields.location, modules: [.pamAudio, .bruvVideo, .ruvImages]) { $0.metadataValue(for: PAMMetadataFieldID.location) ?? $0.metadataValue(for: BRUVMetadataFieldID.location) ?? "" },
-        projectField(ProjectExportFieldID.depth, Strings.ExportFields.depth, modules: [.pamAudio, .bruvVideo, .ruvImages]) { $0.metadataValue(for: PAMMetadataFieldID.depth) ?? $0.metadataValue(for: BRUVMetadataFieldID.depth) ?? "" },
-        projectField(ProjectExportFieldID.bottomType, Strings.ExportFields.bottomType, modules: [.pamAudio, .bruvVideo, .ruvImages]) { $0.metadataValue(for: PAMMetadataFieldID.bottomType) ?? $0.metadataValue(for: BRUVMetadataFieldID.bottomType) ?? "" },
-        projectField(ProjectExportFieldID.waterTemperature, Strings.ExportFields.waterTemperature, modules: [.bruvVideo, .ruvImages]) { $0.metadataValue(for: BRUVMetadataFieldID.waterTemperature) ?? "" },
-        field(ProjectExportFieldID.fileName, Strings.ExportFields.fileName, modules: [.pamAudio]) { file, _ in file.fileName },
-        field(ProjectExportFieldID.fileName, Strings.ExportFields.detectionFile, modules: [.bruvVideo, .ruvImages]) { file, _ in file.fileName },
-        field(ProjectExportFieldID.relativePath, Strings.ExportFields.relativePath, modules: [.pamAudio, .bruvVideo, .ruvImages]) { file, _ in file.relativePath },
-        field(ProjectExportFieldID.sourceMedia, Strings.ExportFields.sourceMedia, modules: [.pamAudio, .bruvVideo, .ruvImages]) { file, _ in sourceMediaDisplayName(for: file) },
-        projectField(processedByFieldID, Strings.ExportFields.processedBy, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _ in "" },
-        field(ProjectExportFieldID.decision, Strings.ExportFields.decision, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.decision.title ?? "" },
-        field(ProjectExportFieldID.reason, Strings.ExportFields.reason, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.notes ?? "" },
-        field(ProjectExportFieldID.speciesFamily, Strings.ExportFields.speciesFamily, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.speciesFamily ?? "" },
-        field(ProjectExportFieldID.speciesGenus, Strings.ExportFields.speciesGenus, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.speciesGenus ?? "" },
-        field(ProjectExportFieldID.speciesName, Strings.ExportFields.speciesName, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.speciesName ?? "" },
-        field(ProjectExportFieldID.speciesFullName, Strings.ExportFields.speciesFullName, modules: [.pamAudio, .bruvVideo, .ruvImages]) { _, decision in decision?.speciesFullName ?? "" },
-        field(ProjectExportFieldID.durationSeconds, Strings.ExportFields.durationSeconds, modules: [.pamAudio, .bruvVideo]) { file, _ in number(file.durationSeconds) },
-        field(ProjectExportFieldID.clipStartSeconds, Strings.ExportFields.clipStartSeconds, modules: [.pamAudio]) { file, _ in number(file.clipStartSeconds) },
-        field(ProjectExportFieldID.clipDurationSeconds, Strings.ExportFields.clipDurationSeconds, modules: [.pamAudio]) { file, _ in number(file.clipDurationSeconds) },
-        field(ProjectExportFieldID.sampleRateHz, Strings.ExportFields.sampleRateHz, modules: [.pamAudio]) { file, _ in int(file.sampleRateHz) },
-        field(ProjectExportFieldID.channels, Strings.ExportFields.channels, modules: [.pamAudio]) { file, _ in int(file.channels) },
-        field(ProjectExportFieldID.bitDepth, Strings.ExportFields.bitDepth, modules: [.pamAudio]) { file, _ in int(file.bitDepth) },
-        field(ProjectExportFieldID.peakDBFS, Strings.ExportFields.peakDBFS, modules: [.pamAudio]) { file, _ in number(file.peakDBFS) },
-        field(ProjectExportFieldID.rmsDBFS, Strings.ExportFields.rmsDBFS, modules: [.pamAudio]) { file, _ in number(file.rmsDBFS) },
-        field(ProjectExportFieldID.detector, Strings.ExportFields.detector, modules: [.pamAudio]) { file, _ in file.format ?? "" },
-        field(ProjectExportFieldID.frameNumber, Strings.ExportFields.frameNumber, modules: [.bruvVideo]) { file, _ in int(file.frameNumber) },
-        field(ProjectExportFieldID.trackID, Strings.ExportFields.trackID, modules: [.bruvVideo]) { file, _ in int(file.trackID) },
-        field(ProjectExportFieldID.maxN, Strings.ExportFields.maxN, modules: [.bruvVideo, .ruvImages]) { file, decision in int(decision?.userMaxN ?? file.maxN) },
-        field(ProjectExportFieldID.confidence, Strings.ExportFields.confidence, modules: [.bruvVideo]) { file, _ in number(file.sharkTrackConfidence) },
-        field(ProjectExportFieldID.frameCount, Strings.ExportFields.frameCount, modules: [.bruvVideo]) { file, _ in int(file.frameCount) },
-        field(ProjectExportFieldID.frameRate, Strings.ExportFields.frameRate, modules: [.bruvVideo]) { file, _ in number(file.frameRate) },
-        field(ProjectExportFieldID.width, Strings.ExportFields.width, modules: [.bruvVideo, .ruvImages]) { file, _ in int(file.width) },
-        field(ProjectExportFieldID.height, Strings.ExportFields.height, modules: [.bruvVideo, .ruvImages]) { file, _ in int(file.height) },
-        field(ProjectExportFieldID.format, Strings.ExportFields.format, modules: [.pamAudio, .bruvVideo, .ruvImages]) { file, _ in file.format ?? "" },
-        field(ProjectExportFieldID.sizeBytes, Strings.ExportFields.sizeBytes, modules: [.pamAudio, .bruvVideo, .ruvImages]) { file, _ in "\(file.sizeBytes)" },
-        field(ProjectExportFieldID.qualityFlag, Strings.ExportFields.qualityFlag, modules: [.bruvVideo, .ruvImages]) { file, _ in file.qualityFlag },
-        field(ProjectExportFieldID.qualityReasons, Strings.ExportFields.qualityReasons, modules: [.bruvVideo, .ruvImages]) { file, _ in file.qualityReasons.joined(separator: PAMExportSeparators.fieldList) }
-    ]
-
-    private static func field(
-        _ id: String,
-        _ title: String,
-        modules: Set<WorkflowModule>,
-        value: @escaping (ProjectScanFile, ManualAuditDecision?) -> String
-    ) -> ProjectExportField {
-        ProjectExportField(id: id, title: title, modules: modules) { _, file, decision in
-            value(file, decision)
-        }
-    }
-
-    private static func projectField(
-        _ id: String,
-        _ title: String,
-        modules: Set<WorkflowModule>,
-        value: @escaping (Project) -> String
-    ) -> ProjectExportField {
-        ProjectExportField(id: id, title: title, modules: modules) { project, _, _ in
-            value(project)
-        }
-    }
-
-    private static func number(_ value: Double?) -> String {
-        value.map { String(format: "%.6f", $0) } ?? ""
-    }
-
-    private static func int(_ value: Int?) -> String {
-        value.map(String.init) ?? ""
-    }
-
-    private static func eventID(_ file: ProjectScanFile) -> String {
-        file.relativePath
-            .replacingOccurrences(of: "\(PAMGuardPreview.relativeEventDirectory)/", with: "")
-            .replacingOccurrences(of: "\(PAMProjectFileNames.pamguardDirectory)/\(PAMProjectFileNames.pamguardDetectionsDirectory)/", with: "")
-            .replacingOccurrences(of: ".\(PAMExportFileNames.spectrogramImageExtension)", with: "")
-    }
-
-    private static func sourceMediaDisplayName(for file: ProjectScanFile) -> String {
-        if let sourceVideo = file.pamSourceMedia, !sourceVideo.isEmpty {
-            return sourceVideo
-        }
-        let components = file.relativePath.split(separator: "/").map(String.init)
-        if let internalResultsIndex = components.firstIndex(of: "internal_results"),
-           components.indices.contains(internalResultsIndex + 1) {
-            return components[internalResultsIndex + 1]
-        }
-        return isSharkTrackOutputName(file.fileName) ? "" : file.fileName
-    }
-
-    private static func isSharkTrackOutputName(_ name: String) -> Bool {
-        let lowercased = name.lowercased()
-        return lowercased.contains("elasmobranch") || lowercased.contains("sharktrack")
-    }
-
-    private static func metadataValue(_ file: ProjectScanFile, key: String) -> String {
-        let prefix = "\(key):"
-        return file.qualityReasons
-            .first { reason in
-                reason.lowercased().hasPrefix(prefix.lowercased())
-            }
-            .map { String($0.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
     }
 }

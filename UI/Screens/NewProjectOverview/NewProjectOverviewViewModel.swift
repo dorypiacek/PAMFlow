@@ -6,51 +6,57 @@
 //
 
 import Foundation
+import Core
 import Observation
 import SwiftData
 import SwiftUI
 
 private enum NewProjectOverviewFormat {
-    static let hertzSuffix = "Hz"
-    static let bitSuffix = "bit"
-    static let framesSuffix = "frames"
-    static let framesPerSecondSuffix = "fps"
-    static let secondsSuffix = "seconds"
-    static let newline = "\n"
-    static let comma = ", "
-    static let byteThresholdMedium = 2 * 1024 * 1024 * 1024
-    static let byteThresholdLarge = 10 * 1024 * 1024 * 1024
-    static let fileThresholdMedium = 100
-    static let fileThresholdLarge = 500
+    public static let hertzSuffix = "Hz"
+    public static let bitSuffix = "bit"
+    public static let framesSuffix = "frames"
+    public static let framesPerSecondSuffix = "fps"
+    public static let secondsSuffix = "seconds"
+    public static let newline = "\n"
+    public static let comma = ", "
+    public static let byteThresholdMedium = 2 * 1024 * 1024 * 1024
+    public static let byteThresholdLarge = 10 * 1024 * 1024 * 1024
+    public static let fileThresholdMedium = 100
+    public static let fileThresholdLarge = 500
 }
 
 /// One metric shown in the new-project overview detail grid.
-struct NewProjectOverviewMetric: Identifiable, Equatable {
-    let title: String
-    let value: String
+public struct NewProjectOverviewMetric: Identifiable, Equatable {
+    public let title: String
+    public let value: String
 
-    var id: String { "\(title)-\(value)" }
+    public var id: String { "\(title)-\(value)" }
+
+    public init(title: String, value: String) {
+        self.title = title
+        self.value = value
+    }
 }
 
 /// View-ready state for the new-project overview screen.
-struct NewProjectOverviewPresentation {
-    let project: Project
-    let summary: ProjectScanSummary
-    let moduleIconName: String
-    let highlightCount: String
-    let highlightTitle: String
-    let highlightMetrics: [HighlightMetric]
-    let detailMetrics: [NewProjectOverviewMetric]
-    let warnings: [String]
-    let showsWarnings: Bool
-    let moduleProcessingStatus: ModuleProcessingStatus
-    let primaryActionTitle: String
-    let isPrimaryActionDisabled: Bool
-    let canSkipManualAudit: Bool
-    let readinessText: String
-    let readinessColor: Color
+public struct NewProjectOverviewPresentation {
+    public let project: Project
+    public let summary: ProjectScanSummary
+    public let moduleIconName: String
+    public let highlightCount: String
+    public let highlightTitle: String
+    public let highlightMetrics: [HighlightMetric]
+    public let detailMetrics: [NewProjectOverviewMetric]
+    public let warnings: [String]
+    public let showsWarnings: Bool
+    public let moduleProcessingStatus: ModuleProcessingStatus
+    public let primaryActionTitle: String
+    public let isPrimaryActionDisabled: Bool
+    public let canSkipManualAudit: Bool
+    public let readinessText: String
+    public let readinessColor: Color
 
-    enum ModuleProcessingStatus: Equatable {
+    public enum ModuleProcessingStatus: Equatable {
         case hidden
         case preparing(String)
         case failed(String)
@@ -61,7 +67,7 @@ struct NewProjectOverviewPresentation {
 
 /// Defines scan-summary presentation, reset actions, and workflow navigation for the project overview screen.
 @MainActor
-protocol NewProjectOverviewViewModelType: AnyObject {
+public protocol NewProjectOverviewViewModelType: AnyObject {
     /// Loaded scan summary for the project.
     var summary: ProjectScanSummary? { get }
     /// User-facing loading, reset, or workflow error.
@@ -74,6 +80,10 @@ protocol NewProjectOverviewViewModelType: AnyObject {
     var moduleProcessingStatusMessage: String? { get }
     /// User-facing module processing failure.
     var moduleProcessingErrorMessage: String? { get }
+    /// Screen title supplied by the active workflow module.
+    var screenTitle: String { get }
+    /// Screen subtitle supplied by the active workflow module.
+    var screenSubtitle: String { get }
 
     /// Loads the project's persisted scan summary.
     func load(project: Project)
@@ -114,30 +124,38 @@ protocol NewProjectOverviewViewModelType: AnyObject {
 /// View model that turns scan results into project overview state and owns reset/skip actions.
 @Observable
 @MainActor
-class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
+open class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     /// Loaded scan summary for the project.
-    var summary: ProjectScanSummary?
+    public var summary: ProjectScanSummary?
     /// User-facing loading, reset, or workflow error.
-    var errorMessage: String?
+    public var errorMessage: String?
     /// Indicates whether module-specific processing is running.
-    var isPreparingModuleProcessing = false
+    public var isPreparingModuleProcessing = false
     /// Tracks whether module-specific processing has been attempted in this view lifetime.
-    var didStartModuleProcessing = false
+    public var didStartModuleProcessing = false
     /// Successful or in-progress module processing status text.
-    var moduleProcessingStatusMessage: String?
+    public var moduleProcessingStatusMessage: String?
     /// User-facing module processing failure.
-    var moduleProcessingErrorMessage: String?
+    public var moduleProcessingErrorMessage: String?
+
+    open var screenTitle: String {
+        Strings.NewProjectOverview.title
+    }
+
+    open var screenSubtitle: String {
+        Strings.NewProjectOverview.subtitle
+    }
 
     /// Service used to load persisted scan summaries.
-    let projectScanService: ProjectScanServicing
+    public let projectScanService: ProjectScanServicing
 
     /// Creates a ViewModel that loads summaries and derives presentation state.
-    init(projectScanService: ProjectScanServicing) {
+    public init(projectScanService: ProjectScanServicing) {
         self.projectScanService = projectScanService
     }
 
     /// Loads a persisted scan summary for the project.
-    func load(project: Project) {
+    open func load(project: Project) {
         do {
             summary = try projectScanService.loadSummary(for: project)
             errorMessage = nil
@@ -146,7 +164,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         }
     }
 
-    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
+    public func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
         let descriptor = FetchDescriptor<Project>(
             predicate: #Predicate { project in
                 project.id == projectID
@@ -156,7 +174,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     }
 
     /// Builds the renderable overview state from current project, summary, and audit progress.
-    func presentation(project: Project, manualAuditProgress: String) -> NewProjectOverviewPresentation? {
+    public func presentation(project: Project, manualAuditProgress: String) -> NewProjectOverviewPresentation? {
         guard let summary else { return nil }
 
         let readiness = readiness(project: project, summary: summary)
@@ -179,7 +197,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         )
     }
 
-    func manualAuditProgress(project: Project, total: Int, modelContext: ModelContext) -> String {
+    public func manualAuditProgress(project: Project, total: Int, modelContext: ModelContext) -> String {
         guard total > 0 else {
             return String(format: Strings.NewProjectOverview.reviewedPercentFormat, 0, 0, 0)
         }
@@ -189,7 +207,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return String(format: Strings.NewProjectOverview.reviewedPercentFormat, reviewed, total, percent)
     }
 
-    func auditDecisionCount(for project: Project, modelContext: ModelContext) -> Int {
+    public func auditDecisionCount(for project: Project, modelContext: ModelContext) -> Int {
         let projectID = project.id
         let descriptor = FetchDescriptor<ManualAuditDecision>(
             predicate: #Predicate { decision in
@@ -199,7 +217,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return (try? modelContext.fetch(descriptor).count) ?? 0
     }
 
-    func hasGeneratedArtifacts(for project: Project, moduleCatalog: ModuleCatalog) -> Bool {
+    public func hasGeneratedArtifacts(for project: Project, moduleCatalog: ModuleCatalog) -> Bool {
         guard let rootFolderURL = project.rootFolderURL,
               let details = moduleCatalog.module(for: ModuleID(rawValue: project.moduleID))?.details else { return false }
         return details.generatedArtifactFolderNames.contains { folderName in
@@ -214,7 +232,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
             isDirectory.boolValue
     }
 
-    func removeProjectAndReturnToSetup(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+    public func removeProjectAndReturnToSetup(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
         do {
             try coordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
             deleteAuditDecisions(for: project, modelContext: modelContext)
@@ -228,7 +246,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         openProjectSetup(for: project, coordinator: coordinator)
     }
 
-    func removeAuditProgressAndGoBackToScan(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+    public func removeAuditProgressAndGoBackToScan(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
         deleteAuditDecisions(for: project, modelContext: modelContext)
         project.workflowStatus = .scanCompleted
         project.lastOpenedAt = .now
@@ -236,7 +254,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         goBack(coordinator: coordinator)
     }
 
-    func skipManualAudit(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+    public func skipManualAudit(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
         guard let summary else { return }
         deleteAuditDecisions(for: project, modelContext: modelContext)
         for file in summary.files {
@@ -255,7 +273,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     }
 
     /// Marks module-specific processing as started.
-    func beginModuleProcessing() {
+    public func beginModuleProcessing() {
         didStartModuleProcessing = true
         isPreparingModuleProcessing = true
         moduleProcessingStatusMessage = moduleProcessingPreparingText
@@ -263,71 +281,71 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
     }
 
     /// Stores successful module processing state.
-    func finishModuleProcessing() {
+    public func finishModuleProcessing() {
         moduleProcessingStatusMessage = moduleProcessingReadyText
         moduleProcessingErrorMessage = nil
         isPreparingModuleProcessing = false
     }
 
     /// Stores failed module processing state.
-    func failModuleProcessing(_ error: Error) {
+    public func failModuleProcessing(_ error: Error) {
         moduleProcessingStatusMessage = nil
         moduleProcessingErrorMessage = error.localizedDescription
         isPreparingModuleProcessing = false
     }
 
     /// Performs the primary action's model decision and delegates navigation to the coordinator.
-    func performPrimaryAction(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
+    public func performPrimaryAction(project: Project, modelContext: ModelContext, coordinator: AppCoordinating) {
         project.lastOpenedAt = .now
         try? modelContext.save()
         coordinator.goToNextStep(for: project)
     }
 
     /// Delegates back navigation when there is no destructive confirmation to show.
-    func goBack(coordinator: AppCoordinating) {
+    public func goBack(coordinator: AppCoordinating) {
         coordinator.goBack()
     }
 
     /// Delegates navigation to the project setup screen for a removed project.
-    func openProjectSetup(for project: Project, coordinator: AppCoordinating) {
+    public func openProjectSetup(for project: Project, coordinator: AppCoordinating) {
         coordinator.openModule(moduleID: ModuleID(rawValue: project.moduleID))
     }
 
     /// Delegates navigation to the project list when no project is available.
-    func openProjectSelection(coordinator: AppCoordinating) {
+    public func openProjectSelection(coordinator: AppCoordinating) {
         coordinator.openProjectSelection()
     }
 
     /// Delegates navigation after skipping manual audit.
-    func continueAfterSkippingManualAudit(for project: Project, coordinator: AppCoordinating) {
+    public func continueAfterSkippingManualAudit(for project: Project, coordinator: AppCoordinating) {
         coordinator.goToNextStep(for: project)
     }
 
-    var moduleIconName: String {
+    open var moduleIconName: String {
         Icons.folder
     }
 
-    var fileLabel: String {
+    open var fileLabel: String {
         Strings.NewProjectOverview.filesFound
     }
 
-    var showsModuleProcessingStatus: Bool {
+    open var showsModuleProcessingStatus: Bool {
         false
     }
 
-    var moduleProcessingPreparingText: String {
+    open var moduleProcessingPreparingText: String {
         Strings.NewProjectOverview.processingInProgress
     }
 
-    var moduleProcessingReadyText: String {
+    open var moduleProcessingReadyText: String {
         Strings.NewProjectOverview.ready
     }
 
-    var moduleProcessingReadyNoticeText: String {
+    open var moduleProcessingReadyNoticeText: String {
         Strings.NewProjectOverview.ready
     }
 
-    var moduleProcessingStatus: NewProjectOverviewPresentation.ModuleProcessingStatus {
+    open var moduleProcessingStatus: NewProjectOverviewPresentation.ModuleProcessingStatus {
         guard showsModuleProcessingStatus else { return .hidden }
         if isPreparingModuleProcessing {
             return .preparing(moduleProcessingStatusMessage ?? moduleProcessingPreparingText)
@@ -341,7 +359,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return .notice(moduleProcessingReadyNoticeText)
     }
 
-    func highlightMetrics(
+    open func highlightMetrics(
         summary: ProjectScanSummary,
         project: Project,
         readiness: (text: String, color: Color)
@@ -380,7 +398,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         }
     }
 
-    func detailMetrics(
+    open func detailMetrics(
         summary: ProjectScanSummary,
         project: Project,
         manualAuditProgress: String
@@ -406,7 +424,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return warnings
     }
 
-    func primaryActionTitle(project: Project) -> String {
+    open func primaryActionTitle(project: Project) -> String {
         switch project.workflowStatus {
         case .manualAuditInProgress:
             return Strings.NewProjectOverview.continueManualAuditButton
@@ -417,16 +435,16 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         }
     }
 
-    func isPrimaryActionDisabled(project: Project, summary: ProjectScanSummary) -> Bool {
+    open func isPrimaryActionDisabled(project: Project, summary: ProjectScanSummary) -> Bool {
         guard summary.fileCount > 0 else { return true }
         return false
     }
 
-    func canSkipManualAudit(project: Project, summary: ProjectScanSummary) -> Bool {
+    open func canSkipManualAudit(project: Project, summary: ProjectScanSummary) -> Bool {
         false
     }
 
-    func readiness(
+    open func readiness(
         project: Project,
         summary: ProjectScanSummary
     ) -> (text: String, color: Color) {
@@ -443,7 +461,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
             : String(format: Strings.NewProjectOverview.filesNeedAttentionPlainFormat, summary.qualityWarningCount)
     }
 
-    func durationRange(_ summary: ProjectScanSummary) -> String {
+    public func durationRange(_ summary: ProjectScanSummary) -> String {
         guard let min = summary.durationMinSeconds, let max = summary.durationMaxSeconds else {
             return Strings.NewProjectOverview.unknown
         }
@@ -451,7 +469,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return "\(formatDuration(min)) - \(formatDuration(max))"
     }
 
-    func estimatedBatchSize(_ summary: ProjectScanSummary) -> String {
+    public func estimatedBatchSize(_ summary: ProjectScanSummary) -> String {
         if summary.fileCount >= NewProjectOverviewFormat.fileThresholdLarge ||
             summary.totalSizeBytes >= NewProjectOverviewFormat.byteThresholdLarge {
             return Strings.NewProjectOverview.largeBatch
@@ -465,7 +483,7 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
         return Strings.NewProjectOverview.smallBatch
     }
 
-    func formattedInts(_ values: [Int], suffix: String? = nil) -> String {
+    public func formattedInts(_ values: [Int], suffix: String? = nil) -> String {
         guard !values.isEmpty else { return Strings.NewProjectOverview.unknown }
 
         return values
@@ -478,12 +496,12 @@ class NewProjectOverviewViewModel: NewProjectOverviewViewModelType {
             .joined(separator: NewProjectOverviewFormat.comma)
     }
 
-    func formattedStrings(_ values: [String]?) -> String {
+    public func formattedStrings(_ values: [String]?) -> String {
         guard let values, !values.isEmpty else { return Strings.NewProjectOverview.unknown }
         return values.joined(separator: NewProjectOverviewFormat.comma)
     }
 
-    func formatDuration(_ seconds: Double) -> String {
+    public func formatDuration(_ seconds: Double) -> String {
         if seconds >= 60 {
             return "\(Int(seconds.rounded())) \(NewProjectOverviewFormat.secondsSuffix)"
         }

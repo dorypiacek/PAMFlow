@@ -6,11 +6,49 @@
 //
 
 import Foundation
+import UI
+import Core
+import SwiftData
 
 /// Manual-audit overview behavior for audio samples and PAMGuard detections.
 @MainActor
 @Observable
 final class PAMManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
+    private static let preheatedPreviewCount = 5
+
+    private let audioPreviewCacheService: AudioPreviewCacheServicing?
+
+    init(
+        projectID: UUID,
+        projectScanService: ProjectScanServicing,
+        audioPreviewCacheService: AudioPreviewCacheServicing? = nil
+    ) {
+        self.audioPreviewCacheService = audioPreviewCacheService
+        super.init(projectID: projectID, projectScanService: projectScanService)
+    }
+
+    override func load(modelContext: ModelContext) {
+        super.load(modelContext: modelContext)
+        guard let overview = overviewModel(modelContext: modelContext) else { return }
+        preheatInitialPreviews(project: overview.project, summary: overview.summary)
+    }
+
+    override func completePrimaryAction(
+        modelContext: ModelContext,
+        overview: ManualAuditOverviewPresentation,
+        coordinator: AppCoordinating
+    ) throws {
+        if !overview.isComplete || overview.configuration.opensCompletionWhenComplete {
+            try super.completePrimaryAction(modelContext: modelContext, overview: overview, coordinator: coordinator)
+            return
+        }
+
+        overview.project.workflowStatus = .pamguardSetupReady
+        overview.project.lastOpenedAt = .now
+        try modelContext.save()
+        coordinator.goToNextStep(for: overview.project)
+    }
+
     override func overviewConfiguration(
         project: Project,
         summary: ProjectScanSummary
@@ -54,7 +92,7 @@ final class PAMManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
     )
 
     private static let detectionConfiguration = ManualAuditOverviewPresentation.Configuration(
-        title: Strings.ManualAuditOverview.audioDetectionTitle,
+        title: PAMStrings.Overview.audioDetectionTitle,
         subtitle: PAMStrings.Overview.audioDetectionSubtitle,
         showsSpeciesBreakdown: true,
         countBreakdownTitle: Strings.ManualAuditOverview.detectionsByRecording,
@@ -111,5 +149,62 @@ final class PAMManualAuditOverviewViewModel: ManualAuditOverviewViewModel {
                     value: value.isEmpty ? Strings.Common.unknown : value
                 )
             }
+    }
+
+    private func preheatInitialPreviews(project: Project, summary: ProjectScanSummary) {
+        guard let audioPreviewCacheService else { return }
+
+        for file in summary.files.prefix(Self.preheatedPreviewCount) {
+            guard let url = playbackURL(project: project, file: file) else {
+                continue
+            }
+            audioPreviewCacheService.preheat(
+                url: url,
+                securityScopedURL: securityScopedURL(for: url, project: project),
+                clipStartSeconds: clipStartSeconds(for: file, summary: summary),
+                clipDurationSeconds: clipDurationSeconds(for: file, summary: summary)
+            )
+        }
+    }
+
+    private func playbackURL(project: Project, file: ProjectScanFile) -> URL? {
+        let sourcePath = file.pamSourceMedia ?? file.relativePath
+        let candidateURL = URL(fileURLWithPath: sourcePath)
+        if candidateURL.isFileURL,
+           candidateURL.path.hasPrefix("/"),
+           PAMMediaFileExtensions.previewAudio.contains(candidateURL.pathExtension.lowercased()),
+           FileManager.default.fileExists(atPath: candidateURL.path) {
+            return candidateURL
+        }
+
+        for baseURL in [project.inputFolderURL, project.rawInputFolderURL, project.rootFolderURL].compactMap({ $0 }).uniqueStandardizedURLs() {
+            let url = baseURL.appendingPathComponent(sourcePath)
+            if PAMMediaFileExtensions.previewAudio.contains(url.pathExtension.lowercased()),
+               FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    private func securityScopedURL(for url: URL, project: Project) -> URL {
+        [project.inputFolderURL, project.rawInputFolderURL, project.rootFolderURL]
+            .compactMap { $0 }
+            .first { url.path.hasPrefix($0.path) }
+            ?? project.inputFolderURL
+            ?? url
+    }
+
+    private func clipStartSeconds(for file: ProjectScanFile, summary: ProjectScanSummary) -> Double? {
+        summary.files.contains { $0.pamDetectionStatus == PAMScanStatus.pamguard }
+            ? max(0, file.clipStartSeconds ?? 0)
+            : nil
+    }
+
+    private func clipDurationSeconds(for file: ProjectScanFile, summary: ProjectScanSummary) -> Double? {
+        summary.files.contains { $0.pamDetectionStatus == PAMScanStatus.pamguard }
+            ? max(0.05, file.clipDurationSeconds ?? file.durationSeconds ?? 1)
+            : nil
     }
 }

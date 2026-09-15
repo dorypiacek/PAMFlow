@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import Observation
 import SwiftData
 

@@ -6,26 +6,21 @@
 //
 
 import AppKit
+import Core
 import Foundation
 import Observation
 import SwiftData
 import SwiftUI
 
-/// Preview surface requested by a manual-audit ViewModel.
-enum ManualAuditPreviewKind {
-    case audio
-    case image
-}
-
 /// Renderable evidence row for the manual-audit side panel.
-struct ManualAuditEvidenceMetric: Identifiable, Equatable {
-    let title: String
-    let value: String
-    let valueColor: Color
+public struct ManualAuditEvidenceMetric: Identifiable, Equatable {
+    public let title: String
+    public let value: String
+    public let valueColor: Color
 
-    var id: String { "\(title)-\(value)" }
+    public var id: String { "\(title)-\(value)" }
 
-    init(title: String, value: String, valueColor: Color = .primary) {
+    public init(title: String, value: String, valueColor: Color = .primary) {
         self.title = title
         self.value = value
         self.valueColor = valueColor
@@ -37,16 +32,14 @@ struct ManualAuditEvidenceMetric: Identifiable, Equatable {
 /// The ViewModel loads scan evidence, tracks the selected file, manages preview
 /// generation, and persists human decisions.
 @MainActor
-protocol ManualAuditViewModelType: AnyObject {
+public protocol ManualAuditViewModelType: AnyObject {
     /// Loaded scan summary containing the files or detections under review.
     var summary: ProjectScanSummary? { get }
     /// Index of the currently selected file within `summary.files`.
     var selectedIndex: Int { get set }
-    /// Generated audio waveform preview for the selected file.
-    var preview: AudioPreview? { get }
     /// User-facing loading, preview, or persistence error.
     var errorMessage: String? { get }
-    /// Indicates whether an audio preview is currently being generated.
+    /// Indicates whether module-specific preview evidence is currently loading.
     var isLoadingPreview: Bool { get }
     /// Currently selected scan file, if the loaded summary contains the selected index.
     var selectedFile: ProjectScanFile? { get }
@@ -56,17 +49,13 @@ protocol ManualAuditViewModelType: AnyObject {
     var canMovePrevious: Bool { get }
     /// Indicates whether the selected index can move forward.
     var canMoveNextByIndex: Bool { get }
-    /// Human-readable video position for frame-based detections.
-    var videoProgressText: String? { get }
     /// Indicates whether the shared evidence panel should include the generic quality row.
     func showsQualityMetric(project: Project) -> Bool
+    /// Indicates whether the shared evidence panel should include the generic file-name row.
+    func showsFileNameMetric(project: Project) -> Bool
 
     /// Returns the screen title for the active review mode.
     func reviewTitle(project: Project) -> String
-    /// Returns the preview mode for the active review queue.
-    func previewKind(project: Project) -> ManualAuditPreviewKind
-    /// Returns whether playback controls should be shown for the selected item.
-    func showsPlaybackControls(project: Project) -> Bool
     /// Returns the decisions available for the active review mode.
     func decisionOptions(project: Project) -> [ManualAuditDecisionValue]
     /// Returns whether an additional action button should be shown for a decision.
@@ -89,22 +78,12 @@ protocol ManualAuditViewModelType: AnyObject {
     func load(project: Project, modelContext: ModelContext, startAtLastReviewed: Bool)
     /// Cancels preview generation and clears preview cache state owned by this screen.
     func cancelPreviewWork()
-    /// Loads or regenerates the audio preview for the selected file.
+    /// Lets modules load or regenerate preview evidence for the selected file.
     func loadPreview(project: Project)
     /// Persists the free-text or selected reason attached to the current decision.
     func saveInvalidReason(_ reason: String, project: Project, modelContext: ModelContext)
     /// Returns the audit reason configuration for the current module and review mode.
     func reasonConfiguration(for project: Project) -> AuditReasonConfiguration
-    /// Resolves the preview image URL for frame-based detections.
-    func imagePreviewURL(file: ProjectScanFile, project: Project) -> URL?
-    /// Loads the preview image for frame-based detections while respecting security scope.
-    func previewImage(file: ProjectScanFile, project: Project) -> NSImage?
-    /// Resolves the playable media URL for modules that provide playback.
-    func playbackURL(project: Project, file: ProjectScanFile) -> URL?
-    /// Start offset for modules that play a clipped segment of a source file.
-    func playbackStartSeconds(project: Project, file: ProjectScanFile) -> Double?
-    /// Playback duration for modules that play a clipped segment of a source file.
-    func playbackDurationSeconds(project: Project, file: ProjectScanFile) -> Double?
     /// Builds editable species rows for modules that support assigning species.
     func speciesAssignmentDrafts(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> [SpeciesAssignmentDraft]
 }
@@ -112,28 +91,26 @@ protocol ManualAuditViewModelType: AnyObject {
 /// View model for queue navigation, preview generation, and manual decision persistence.
 @Observable
 @MainActor
-class ManualAuditViewModel: ManualAuditViewModelType {
+open class ManualAuditViewModel: ManualAuditViewModelType {
     /// Loaded scan summary containing the files or detections under review.
-    var summary: ProjectScanSummary?
+    public var summary: ProjectScanSummary?
     /// Index of the currently selected file within `summary.files`.
-    var selectedIndex = 0
-    /// Generated audio waveform preview for the selected file.
-    var preview: AudioPreview?
+    public var selectedIndex = 0
     /// User-facing loading, preview, or persistence error.
-    var errorMessage: String?
-    /// Indicates whether an audio preview is currently being generated.
-    var isLoadingPreview = false
+    public var errorMessage: String?
+    /// Indicates whether module-specific preview evidence is currently loading.
+    public var isLoadingPreview = false
 
     /// Service used to load scan summaries for audit.
-    let projectScanService: ProjectScanServicing
+    public let projectScanService: ProjectScanServicing
     /// Active preview generation task for the selected file.
     private var previewTask: Task<Void, Never>?
     /// Creates a manual-audit ViewModel with an injectable scan service.
-    init(projectScanService: ProjectScanServicing) {
+    public init(projectScanService: ProjectScanServicing) {
         self.projectScanService = projectScanService
     }
 
-    var selectedFile: ProjectScanFile? {
+    public var selectedFile: ProjectScanFile? {
         guard let files = summary?.files, files.indices.contains(selectedIndex) else {
             return nil
         }
@@ -141,7 +118,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return files[selectedIndex]
     }
 
-    var progressText: String {
+    public var progressText: String {
         guard let fileCount = summary?.files.count, fileCount > 0 else {
             return "No files"
         }
@@ -149,76 +126,67 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return "\(selectedIndex + 1) of \(fileCount)"
     }
 
-    var canMovePrevious: Bool {
+    public var canMovePrevious: Bool {
         selectedIndex > 0
     }
 
-    var canMoveNextByIndex: Bool {
+    public var canMoveNextByIndex: Bool {
         guard let fileCount = summary?.files.count else { return false }
         return selectedIndex < fileCount - 1
     }
 
-    /// Position of the selected detection within the project's source videos.
-    var videoProgressText: String? {
-        nil
-    }
-
-    func reviewTitle(project: Project) -> String {
+    open func reviewTitle(project: Project) -> String {
         Strings.ManualAudit.title
     }
 
-    func previewKind(project: Project) -> ManualAuditPreviewKind {
-        .audio
-    }
-
-    func showsPlaybackControls(project: Project) -> Bool {
-        false
-    }
-
-    func decisionOptions(project: Project) -> [ManualAuditDecisionValue] {
+    open func decisionOptions(project: Project) -> [ManualAuditDecisionValue] {
         return [.valid, .invalid]
     }
 
-    func shouldShowReviewAction(project: Project) -> Bool {
+    open func shouldShowReviewAction(project: Project) -> Bool {
         false
     }
 
-    func canAssignSpecies(project: Project) -> Bool {
+    open func canAssignSpecies(project: Project) -> Bool {
         false
     }
 
-    func canEditMaxN(project: Project) -> Bool {
+    open func canEditMaxN(project: Project) -> Bool {
         false
     }
 
-    func showsQualityMetric(project: Project) -> Bool {
+    open func showsQualityMetric(project: Project) -> Bool {
         true
     }
 
-    func speciesTaxa(project: Project) -> [SpeciesTaxon] {
+    open func showsFileNameMetric(project: Project) -> Bool {
+        true
+    }
+
+    open func speciesTaxa(project: Project) -> [SpeciesTaxon] {
         []
     }
 
-    func evidenceMetrics(file: ProjectScanFile, project: Project) -> [ManualAuditEvidenceMetric] {
+    open func evidenceMetrics(file: ProjectScanFile, project: Project) -> [ManualAuditEvidenceMetric] {
         [
             ManualAuditEvidenceMetric(title: Strings.ManualAudit.format, value: file.format ?? Strings.Common.unknown),
             ManualAuditEvidenceMetric(title: Strings.ManualAudit.fileSize, value: formattedFileSize(file.sizeBytes))
         ]
     }
 
-    func displaySourceName(for file: ProjectScanFile, project: Project) -> String {
+    open func displaySourceName(for file: ProjectScanFile, project: Project) -> String {
         file.fileName
     }
 
-    func qualityValueColor(_ flag: String) -> Color {
+    open func qualityValueColor(_ flag: String) -> Color {
         flag.localizedCaseInsensitiveCompare("OK") == .orderedSame ? .primary : AppColors.error
     }
 
-    func reviewHeaderText(project: Project) -> String {
+    open func reviewHeaderText(project: Project) -> String {
         "\(project.name) - \(selectedIndex + 1)/\(summary?.files.count ?? 0)"
     }
 
-    func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
+    public func fetchProject(_ projectID: UUID, modelContext: ModelContext) -> Project? {
         let descriptor = FetchDescriptor<Project>(
             predicate: #Predicate { project in
                 project.id == projectID
@@ -227,7 +195,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return try? modelContext.fetch(descriptor).first
     }
 
-    func load(project: Project, modelContext: ModelContext, startAtLastReviewed: Bool = false) {
+    open func load(project: Project, modelContext: ModelContext, startAtLastReviewed: Bool = false) {
         do {
             AppLog.info("Manual audit loading project '\(project.name)'")
             var loadedSummary = try projectScanService.loadSummary(for: project)
@@ -245,21 +213,19 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         }
     }
 
-    func cancelPreviewWork() {
+    open func cancelPreviewWork() {
         previewTask?.cancel()
         previewTask = nil
-        preview = nil
         isLoadingPreview = false
     }
 
-    func loadPreview(project: Project) {
+    open func loadPreview(project: Project) {
         previewTask?.cancel()
-        preview = nil
         errorMessage = nil
         isLoadingPreview = false
     }
 
-    func saveDecision(
+    public func saveDecision(
         _ value: ManualAuditDecisionValue,
         project: Project,
         modelContext: ModelContext
@@ -297,11 +263,11 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         AppLog.info("Manual audit saved decision; status=\(project.workflowStatus.rawValue)")
     }
 
-    func decision(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> ManualAuditDecisionValue? {
+    public func decision(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> ManualAuditDecisionValue? {
         auditDecision(for: file, project: project, modelContext: modelContext)?.decision
     }
 
-    func auditDecision(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> ManualAuditDecision? {
+    public func auditDecision(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> ManualAuditDecision? {
         let id = ManualAuditDecision.makeID(projectID: project.id, fileRelativePath: file.relativePath)
         let descriptor = FetchDescriptor<ManualAuditDecision>(
             predicate: #Predicate { decision in
@@ -311,7 +277,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return try? modelContext.fetch(descriptor).first
     }
 
-    func saveInvalidReason(_ reason: String, project: Project, modelContext: ModelContext) {
+    public func saveInvalidReason(_ reason: String, project: Project, modelContext: ModelContext) {
         guard let file = selectedFile,
               let auditDecision = auditDecision(for: file, project: project, modelContext: modelContext) else {
             return
@@ -321,11 +287,11 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try? modelContext.save()
     }
 
-    func reasonConfiguration(for project: Project) -> AuditReasonConfiguration {
+    open func reasonConfiguration(for project: Project) -> AuditReasonConfiguration {
         return .freeTextOptional()
     }
 
-    func decision(
+    public func decision(
         for file: ProjectScanFile,
         project: Project,
         modelContext: ModelContext,
@@ -335,7 +301,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return decision(for: file, project: project, modelContext: modelContext)
     }
 
-    func speciesSelection(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> SpeciesSelection {
+    public func speciesSelection(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> SpeciesSelection {
         guard let decision = auditDecision(for: file, project: project, modelContext: modelContext) else {
             return SpeciesSelection(family: nil, genus: nil, species: nil, fullName: "")
         }
@@ -348,7 +314,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         )
     }
 
-    func speciesSelections(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> [SpeciesSelection] {
+    public func speciesSelections(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> [SpeciesSelection] {
         guard let decision = auditDecision(for: file, project: project, modelContext: modelContext) else {
             return []
         }
@@ -367,15 +333,15 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return legacySelection.fullName.isEmpty ? [] : [legacySelection]
     }
 
-    func isRemovedFromExport(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> Bool {
+    public func isRemovedFromExport(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> Bool {
         auditDecision(for: file, project: project, modelContext: modelContext)?.isRemovedFromExport == true
     }
 
-    func effectiveMaxN(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> Int? {
+    open func effectiveMaxN(for file: ProjectScanFile, project: Project, modelContext: ModelContext) -> Int? {
         auditDecision(for: file, project: project, modelContext: modelContext)?.userMaxN
     }
 
-    func saveSpeciesSelection(
+    public func saveSpeciesSelection(
         _ selection: SpeciesSelection,
         project: Project,
         modelContext: ModelContext
@@ -383,7 +349,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try saveSpeciesSelection(selection, replacingID: selection.id, project: project, modelContext: modelContext)
     }
 
-    func saveSpeciesSelection(
+    public func saveSpeciesSelection(
         _ selection: SpeciesSelection,
         replacingID selectionID: String?,
         project: Project,
@@ -435,7 +401,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try modelContext.save()
     }
 
-    func deleteSpeciesSelection(
+    public func deleteSpeciesSelection(
         _ selection: SpeciesSelection,
         project: Project,
         modelContext: ModelContext
@@ -455,7 +421,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
     }
 
     /// Replaces any legacy multi-species value with one species for this track.
-    func replaceSpeciesSelection(
+    public func replaceSpeciesSelection(
         _ selection: SpeciesSelection,
         project: Project,
         modelContext: ModelContext
@@ -472,7 +438,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
     }
 
     /// Clears species metadata while retaining the human review decision.
-    func clearSpeciesSelections(project: Project, modelContext: ModelContext) throws {
+    public func clearSpeciesSelections(project: Project, modelContext: ModelContext) throws {
         guard let file = selectedFile,
               let decision = auditDecision(for: file, project: project, modelContext: modelContext) else { return }
         decision.speciesFamily = nil
@@ -485,7 +451,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
     }
 
     /// Persists one modal row against its own detection record.
-    func saveSpeciesAssignment(
+    public func saveSpeciesAssignment(
         _ draft: SpeciesAssignmentDraft,
         project: Project,
         modelContext: ModelContext
@@ -518,7 +484,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try modelContext.save()
     }
 
-    func setRemovedFromExport(
+    public func setRemovedFromExport(
         _ isRemoved: Bool,
         project: Project,
         modelContext: ModelContext
@@ -544,7 +510,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try modelContext.save()
     }
 
-    func saveMaxNOverride(
+    public func saveMaxNOverride(
         _ maxN: Int?,
         project: Project,
         modelContext: ModelContext
@@ -564,54 +530,20 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         try modelContext.save()
     }
 
-    func playbackURL(project: Project, file: ProjectScanFile) -> URL? {
-        nil
-    }
-
-    func imagePreviewURL(file: ProjectScanFile, project: Project) -> URL? {
-        nil
-    }
-
-    func previewImage(file: ProjectScanFile, project: Project) -> NSImage? {
-        guard let previewURL = imagePreviewURL(file: file, project: project) else {
-            return nil
-        }
-
-        let scopedURL = previewURL.path.hasPrefix(project.rootFolderURL?.path ?? "")
-            ? project.rootFolderURL
-            : project.inputFolderURL
-        let accessed = scopedURL?.startAccessingSecurityScopedResource() ?? false
-        defer {
-            if accessed {
-                scopedURL?.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        return NSImage(contentsOf: previewURL)
-    }
-
-    func playbackStartSeconds(project: Project, file: ProjectScanFile) -> Double? {
-        nil
-    }
-
-    func playbackDurationSeconds(project: Project, file: ProjectScanFile) -> Double? {
-        nil
-    }
-
-    func movePrevious(project: Project) {
+    public func movePrevious(project: Project) {
         guard selectedIndex > 0 else { return }
         selectedIndex -= 1
         loadPreview(project: project)
     }
 
-    func moveNext(project: Project) {
+    public func moveNext(project: Project) {
         guard let fileCount = summary?.files.count, selectedIndex < fileCount - 1 else { return }
         selectedIndex += 1
         AppLog.info("Manual audit moved to next index \(selectedIndex)")
         loadPreview(project: project)
     }
 
-    func completedCount(project: Project, modelContext: ModelContext) -> Int {
+    public func completedCount(project: Project, modelContext: ModelContext) -> Int {
         let projectID = project.id
         let summaryFilePaths = Set(summary?.files.map(\.relativePath) ?? [])
         let descriptor = FetchDescriptor<ManualAuditDecision>(
@@ -663,15 +595,15 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         return score
     }
 
-    func formatDuration(_ seconds: Double) -> String {
+    public func formatDuration(_ seconds: Double) -> String {
         seconds >= 60 ? "\(Int(seconds.rounded())) seconds" : String(format: "%.1f seconds", seconds)
     }
 
-    func formattedFileSize(_ byteCount: Int) -> String {
+    public func formattedFileSize(_ byteCount: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
     }
 
-    func speciesAssignmentDrafts(
+    open func speciesAssignmentDrafts(
         for file: ProjectScanFile,
         project: Project,
         modelContext: ModelContext
@@ -687,7 +619,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         ]
     }
 
-    func workflowStatusAfterSavingDecision(
+    open func workflowStatusAfterSavingDecision(
         reviewedCount: Int,
         totalCount: Int,
         project: Project
@@ -695,7 +627,7 @@ class ManualAuditViewModel: ManualAuditViewModelType {
         reviewedCount >= totalCount ? .completed : .inProgress
     }
 
-    func sortFiles(_ files: inout [ProjectScanFile], project: Project) {
+    open func sortFiles(_ files: inout [ProjectScanFile], project: Project) {
         files.sort { suspicionScore($0) > suspicionScore($1) }
     }
 }

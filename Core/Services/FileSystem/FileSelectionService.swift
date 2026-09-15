@@ -7,17 +7,22 @@
 
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 /// Abstraction for choosing folders from UI code.
 ///
 /// Keeping this as a protocol lets feature models be tested without presenting
 /// AppKit panels.
-protocol FileSelecting {
+@MainActor
+public protocol FileSelecting {
     /// Presents folder selection and returns the chosen folder URL, if any.
     func selectFolder(title: String, message: String) -> URL?
 
     /// Presents a mixed source selector and returns either one folder or multiple files.
     func selectInputSource(title: String, message: String) -> ProjectInputSourceSelection?
+
+    /// Presents a mixed source selector, optionally restricting visible files by extension.
+    func selectInputSource(title: String, message: String, allowedFileExtensions: Set<String>?) -> ProjectInputSourceSelection?
 
     /// Presents a folder selector to reacquire write access to a project container.
     func selectWritableProjectContainer(title: String, message: String, defaultURL: URL?) -> URL?
@@ -27,14 +32,18 @@ protocol FileSelecting {
 }
 
 /// System file-opening actions used by lightweight UI helpers.
-protocol FileOpening {
+@MainActor
+public protocol FileOpening {
     static func revealInFinder(_ url: URL)
     static func open(_ url: URL)
 }
 
 /// AppKit-backed implementation of folder selection for macOS.
-final class FileSelectionService: FileSelecting, FileOpening {
-    func selectFolder(title: String, message: String) -> URL? {
+@MainActor
+public final class FileSelectionService: FileSelecting, FileOpening {
+    public init() {}
+
+    public func selectFolder(title: String, message: String) -> URL? {
         let panel = NSOpenPanel()
         panel.title = title
         panel.message = message
@@ -47,7 +56,15 @@ final class FileSelectionService: FileSelecting, FileOpening {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
-    func selectInputSource(title: String, message: String) -> ProjectInputSourceSelection? {
+    public func selectInputSource(title: String, message: String) -> ProjectInputSourceSelection? {
+        selectInputSource(title: title, message: message, allowedFileExtensions: nil)
+    }
+
+    public func selectInputSource(
+        title: String,
+        message: String,
+        allowedFileExtensions: Set<String>?
+    ) -> ProjectInputSourceSelection? {
         let panel = NSOpenPanel()
         panel.title = title
         panel.message = message
@@ -56,6 +73,11 @@ final class FileSelectionService: FileSelecting, FileOpening {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
+        if let allowedFileExtensions, !allowedFileExtensions.isEmpty {
+            panel.allowedContentTypes = allowedFileExtensions
+                .sorted()
+                .compactMap { UTType(filenameExtension: $0) }
+        }
 
         guard panel.runModal() == .OK else { return nil }
         let urls = panel.urls
@@ -70,7 +92,7 @@ final class FileSelectionService: FileSelecting, FileOpening {
         return .files(files)
     }
 
-    func selectWritableProjectContainer(title: String, message: String, defaultURL: URL?) -> URL? {
+    public func selectWritableProjectContainer(title: String, message: String, defaultURL: URL?) -> URL? {
         let panel = NSOpenPanel()
         panel.title = title
         panel.message = message
@@ -84,7 +106,7 @@ final class FileSelectionService: FileSelecting, FileOpening {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
-    func selectSaveDestination(defaultName: String, canCreateDirectories: Bool) -> URL? {
+    public func selectSaveDestination(defaultName: String, canCreateDirectories: Bool) -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = defaultName
         panel.canCreateDirectories = canCreateDirectories
@@ -92,7 +114,7 @@ final class FileSelectionService: FileSelecting, FileOpening {
     }
 
     /// Reveals a file or folder in Finder.
-    static func revealInFinder(_ url: URL) {
+    public static func revealInFinder(_ url: URL) {
         if FileManager.default.fileExists(atPath: url.path) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } else {
@@ -101,7 +123,7 @@ final class FileSelectionService: FileSelecting, FileOpening {
     }
 
     /// Opens a URL with the system default app.
-    static func open(_ url: URL) {
+    public static func open(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
 
@@ -110,11 +132,11 @@ final class FileSelectionService: FileSelecting, FileOpening {
     }
 }
 
-enum ProjectInputSourceSelection: Equatable {
+public enum ProjectInputSourceSelection: Equatable {
     case folder(URL)
     case files([URL])
 
-    var displayURL: URL? {
+    public var displayURL: URL? {
         switch self {
         case .folder(let url):
             return url
@@ -123,7 +145,7 @@ enum ProjectInputSourceSelection: Equatable {
         }
     }
 
-    var displayText: String {
+    public var displayText: String {
         switch self {
         case .folder(let url):
             return url.path
@@ -135,7 +157,7 @@ enum ProjectInputSourceSelection: Equatable {
         }
     }
 
-    var rawMediaFolderURL: URL? {
+    public var rawMediaFolderURL: URL? {
         switch self {
         case .folder(let url):
             return url

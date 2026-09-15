@@ -9,42 +9,42 @@ import Foundation
 import SwiftData
 
 /// Human audit decision for one scanned input file.
-enum ManualAuditDecisionValue: String, CaseIterable, Codable, Hashable {
+public enum ManualAuditDecisionValue: String, CaseIterable, Codable, Hashable {
     case valid
     case unsure
     case invalid
 
-    var title: String {
+    public var title: String {
         switch self {
         case .valid:
-            Strings.ManualAuditOverview.valid
+            "Valid"
         case .unsure:
-            Strings.ManualAuditOverview.unsure
+            "Unsure"
         case .invalid:
-            Strings.ManualAuditOverview.invalid
+            "Invalid"
         }
     }
 }
 
 /// SwiftData record storing the user's manual audit decision and optional species.
 @Model
-final class ManualAuditDecision {
-    @Attribute(.unique) var id: String
-    var projectID: UUID
-    var fileRelativePath: String
+public final class ManualAuditDecision {
+    @Attribute(.unique) public var id: String
+    public var projectID: UUID
+    public var fileRelativePath: String
     var decisionRaw: String
-    var notes: String
-    var speciesFamily: String?
-    var speciesGenus: String?
-    var speciesName: String?
-    var speciesFullName: String?
-    var speciesSelectionsJSON: String?
-    var isRemovedFromExport: Bool?
-    var userMaxN: Int?
-    var createdAt: Date
-    var updatedAt: Date?
+    public var notes: String
+    public var speciesFamily: String?
+    public var speciesGenus: String?
+    public var speciesName: String?
+    public var speciesFullName: String?
+    public var speciesSelectionsJSON: String?
+    public var isRemovedFromExport: Bool?
+    public var userMaxN: Int?
+    public var createdAt: Date
+    public var updatedAt: Date?
 
-    init(
+    public init(
         projectID: UUID,
         fileRelativePath: String,
         decision: ManualAuditDecisionValue,
@@ -69,7 +69,7 @@ final class ManualAuditDecision {
     }
 }
 
-extension ManualAuditDecision {
+public extension ManualAuditDecision {
     var decision: ManualAuditDecisionValue {
         get {
             ManualAuditDecisionValue(rawValue: decisionRaw) ?? .unsure
@@ -86,12 +86,12 @@ extension ManualAuditDecision {
 }
 
 /// Configuration consumed by the shared audit shell.
-struct ManualAuditConfiguration: Hashable, Sendable {
-    let title: String
-    let emptyStateTitle: String
-    let decisionOptions: [AuditDecisionOption]
+public struct ManualAuditConfiguration: Hashable, Sendable {
+    public let title: String
+    public let emptyStateTitle: String
+    public let decisionOptions: [AuditDecisionOption]
 
-    init(title: String, emptyStateTitle: String, decisionOptions: [AuditDecisionOption]) {
+    public init(title: String, emptyStateTitle: String, decisionOptions: [AuditDecisionOption]) {
         self.title = title
         self.emptyStateTitle = emptyStateTitle
         self.decisionOptions = decisionOptions
@@ -99,11 +99,11 @@ struct ManualAuditConfiguration: Hashable, Sendable {
 }
 
 /// Generic audit decision exposed by a module.
-struct AuditDecisionOption: Hashable, Sendable {
-    let id: String
-    let title: String
+public struct AuditDecisionOption: Hashable, Sendable {
+    public let id: String
+    public let title: String
 
-    init(id: String, title: String) {
+    public init(id: String, title: String) {
         self.id = id
         self.title = title
     }

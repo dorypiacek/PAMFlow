@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import ImageIO
 import SharkTrackKit
 
@@ -78,17 +80,17 @@ nonisolated struct SharkTrackProjectPaths: Sendable {
 }
 
 nonisolated struct SharkTrackPreparationContext: Sendable {
-    let module: WorkflowModule
+    let module: BRUVProjectType
     let projectName: String
     let inputFolderURL: URL
     let displayInputFolderURL: URL
     let projectRootURL: URL
 
     init(project: Project) throws {
-        module = WorkflowModule.module(for: project.moduleID)
-        guard module == .bruvVideo || module == .ruvImages else {
+        guard let module = BRUVProjectType(moduleID: project.moduleID) else {
             throw SharkTrackPreparationError.unsupportedModule
         }
+        self.module = module
         guard let inputFolderURL = project.inputFolderURL else {
             AppLog.module("SharkTrack", "Preparation failed: missing input folder bookmark")
             throw SharkTrackPreparationError.missingInputFolder
@@ -160,8 +162,8 @@ nonisolated struct SharkTrackMediaDiscovery: Sendable {
 
     static let `default` = SharkTrackMediaDiscovery()
 
-    func mediaFiles(module: WorkflowModule, in root: URL) -> [URL] {
-        let kind: MediaKind = module == .bruvVideo ? .video : .image
+    func mediaFiles(module: BRUVProjectType, in root: URL) -> [URL] {
+        let kind: MediaKind = module == .bruv ? .video : .image
         let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
         return (fileSystem.enumerator(at: root, includingPropertiesForKeys: keys)?
             .compactMap { $0 as? URL }
@@ -314,7 +316,7 @@ nonisolated struct SharkTrackOutputWriter: Sendable {
 
     func writeDetections(
         from result: SharkTrackResult,
-        module: WorkflowModule,
+        module: BRUVProjectType,
         outputURL: URL,
         projectRootURL: URL
     ) throws -> [SharkTrackDetectionOutput] {
@@ -326,7 +328,7 @@ nonisolated struct SharkTrackOutputWriter: Sendable {
 
     func writeDetection(
         _ detection: SharkTrackKit.SharkTrackDetection,
-        module: WorkflowModule,
+        module: BRUVProjectType,
         outputURL: URL,
         projectRootURL: URL
     ) throws -> SharkTrackDetectionOutput {
@@ -358,8 +360,8 @@ nonisolated struct SharkTrackOutputWriter: Sendable {
         )
     }
 
-    func finalDetectionFolder(module: WorkflowModule, outputURL: URL, sourceFolderName: String) -> URL {
-        module == .bruvVideo
+    func finalDetectionFolder(module: BRUVProjectType, outputURL: URL, sourceFolderName: String) -> URL {
+        module == .bruv
             ? outputURL.appendingPathComponent(sourceFolderName, isDirectory: true)
             : outputURL
     }
@@ -509,7 +511,7 @@ nonisolated struct SharkTrackManifest: Codable, Equatable, Sendable {
     var updatedAt: Date
 
     static func running(
-        module: WorkflowModule,
+        module: BRUVProjectType,
         projectName: String,
         inputFolderURL: URL,
         outputFolderURL: URL,
@@ -527,7 +529,7 @@ nonisolated struct SharkTrackManifest: Codable, Equatable, Sendable {
     }
 
     static func completed(
-        module: WorkflowModule,
+        module: BRUVProjectType,
         projectName: String,
         inputFolderURL: URL,
         outputFolderURL: URL,

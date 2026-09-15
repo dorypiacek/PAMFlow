@@ -6,13 +6,44 @@
 //
 
 import Foundation
+import UI
+import Core
 
 /// User-facing copy owned by the PAM module.
 enum PAMStrings {
+    enum Preview {
+        static let amplitudeAxis = "Amplitude"
+        static let frequencyAxis = "Frequency (Hz)"
+        static let loading = "Loading preview"
+        static let pauseHelp = "Pause"
+        static let playHelp = "Play"
+        static let timeAxis = "Time (s)"
+        static let unavailable = "Preview is unavailable for this file."
+    }
+
     enum Module {
         nonisolated static let title = "PAM Audio"
         nonisolated static let subtitle = "WAV recordings for PAMGuard-based acoustic review."
         nonisolated static let folderName = "Audio"
+    }
+
+    enum ProjectSetup {
+        static let metadataUploadMessage = "Upload PAM deployment metadata to prefill the required fields."
+        static let opcode = "OpCode"
+        static let dateDeployed = "Date Deployed"
+        static let dateRetrieved = "Date Retrieved"
+        static let location = "Location"
+        static let depth = "Depth"
+        static let bottomType = "Bottom Type"
+    }
+
+    enum ScanWarnings {
+        static let noAudioFilesFound = "No WAV files were found in the selected folder."
+        static let unreadableFilesFound = "Some audio files could not be read."
+        static let multipleSampleRatesFound = "Multiple sample rates were detected."
+        static let clippedFilesFound = "Some audio files may be clipped."
+        static let nearlyEmptyFilesFound = "Some audio files are nearly empty."
+        static let largeBatch = "This batch is large and may take a while."
     }
 
     enum Overview {
@@ -20,6 +51,9 @@ enum PAMStrings {
         static let goToPamguardSetup = "Go to PAMGuard Setup"
         static let preparePamguardHelp = "Prepare PAMGuard files"
         static let audioDetectionSubtitle = "Review the PAMGuard detection decisions before creating the export."
+        static let audioDetectionTitle = "Audio Detection Overview"
+        static let bitDepths = "Bit depths found"
+        static let sampleRates = "Sample rates found"
     }
 
     enum ExportPackage {
@@ -109,5 +143,21 @@ enum PAMStrings {
         static let starting = "Starting PAMGuard detection import..."
         static let failed = "PAMGuard detection import failed."
         static let retry = "Retry Import"
+    }
+
+    enum Completion {
+        static let title = "Project Complete"
+        static let subtitle = "Export the PAMGuard detection package or return to the project library."
+        static let exportPackage = "Export PAMGuard Package"
+        static let complete = "Complete"
+        static let backToProjects = "Back to Projects"
+        static let projectOverview = "Project Overview"
+        static let project = "Project"
+        static let processedBy = "Processed By"
+        static let reviewedFiles = "Reviewed Files"
+        static let validDecisions = "Valid Decisions"
+        static let invalidDecisions = "Invalid Decisions"
+        static let unsureDecisions = "Unsure Decisions"
+        static let exportSuccessFormat = "Exported %@"
     }
 }

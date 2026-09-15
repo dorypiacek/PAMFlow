@@ -6,11 +6,13 @@
 //
 
 import Foundation
+import UI
+import Core
 
 /// Simulation boundary for local SharkTrack demo detections.
 protocol SharkTrackSimulationServicing: Sendable {
     nonisolated func makeDetections(
-        module: WorkflowModule,
+        module: BRUVProjectType,
         outputURL: URL,
         projectRootURL: URL
     ) throws -> [SharkTrackDetectionOutput]
@@ -38,7 +40,7 @@ nonisolated struct SharkTrackSimulationService: SharkTrackSimulationServicing {
     static let `default` = SharkTrackSimulationService()
 
     func makeDetections(
-        module: WorkflowModule,
+        module: BRUVProjectType,
         outputURL: URL,
         projectRootURL: URL
     ) throws -> [SharkTrackDetectionOutput] {
@@ -57,7 +59,7 @@ nonisolated struct SharkTrackSimulationService: SharkTrackSimulationServicing {
 
     private func copy(
         _ screenshot: SimulationScreenshot,
-        module: WorkflowModule,
+        module: BRUVProjectType,
         outputURL: URL,
         projectRootURL: URL
     ) throws -> SharkTrackDetectionOutput {

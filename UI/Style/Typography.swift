@@ -6,11 +6,12 @@
 //
 
 import SwiftUI
+import Core
 
-enum Fonts {
-    static let screenTitle: Font = .largeTitle.bold()
-    static let subtitle: Font = .title3
-    static let sectionTitle: Font = .title2.bold()
-    static let body: Font = .body
-    static let caption: Font = .caption
+public enum Fonts {
+    public static let screenTitle: Font = .largeTitle.bold()
+    public static let subtitle: Font = .title3
+    public static let sectionTitle: Font = .title2.bold()
+    public static let body: Font = .body
+    public static let caption: Font = .caption
 }

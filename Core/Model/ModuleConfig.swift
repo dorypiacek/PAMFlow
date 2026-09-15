@@ -6,13 +6,13 @@
 //
 
 /// Module-owned file and folder names used by shared project services.
-struct ModuleFileConfiguration: Hashable, Sendable {
-    let sourceDirectoryName: String
-    let workDirectoryName: String
-    let scanSummaryFileName: String
-    let generatedArtifactFolderNames: Set<String>
+public struct ModuleFileConfiguration: Hashable, Sendable {
+    public let sourceDirectoryName: String
+    public let workDirectoryName: String
+    public let scanSummaryFileName: String
+    public let generatedArtifactFolderNames: Set<String>
 
-    init(
+    public init(
         sourceDirectoryName: String = ProjectFileNames.sourceDirectory,
         workDirectoryName: String = ProjectFileNames.workDirectory,
         scanSummaryFileName: String = ProjectFileNames.scanSummary,
@@ -26,12 +26,12 @@ struct ModuleFileConfiguration: Hashable, Sendable {
 }
 
 /// Module-owned workflow configuration consumed by shared UI and services.
-struct ModuleConfiguration {
-    let details: ModuleDetails
-    let fileConfiguration: ModuleFileConfiguration
-    let setupConfiguration: @MainActor () -> ProjectSetupConfiguration
+public struct ModuleConfiguration {
+    public let details: ModuleDetails
+    public let fileConfiguration: ModuleFileConfiguration
+    public let setupConfiguration: @MainActor () -> ProjectSetupConfiguration
 
-    init(
+    public init(
         details: ModuleDetails,
         fileConfiguration: ModuleFileConfiguration,
         setupConfiguration: @escaping @MainActor () -> ProjectSetupConfiguration

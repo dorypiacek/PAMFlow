@@ -6,17 +6,18 @@
 //
 
 import SwiftUI
+import Core
 
-struct LoadingCardView<Actions: View>: View {
-    let title: String
-    let subtitle: String
-    let message: String
-    let progress: Double?
-    let detail: String?
-    let errorMessage: String?
+public struct LoadingCardView<Actions: View>: View {
+    public let title: String
+    public let subtitle: String
+    public let message: String
+    public let progress: Double?
+    public let detail: String?
+    public let errorMessage: String?
     @ViewBuilder let actions: () -> Actions
 
-    init(
+    public init(
         title: String,
         subtitle: String,
         message: String,
@@ -34,7 +35,7 @@ struct LoadingCardView<Actions: View>: View {
         self.actions = actions
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: Spacing.large) {
             ProgressView()
                 .controlSize(.large)

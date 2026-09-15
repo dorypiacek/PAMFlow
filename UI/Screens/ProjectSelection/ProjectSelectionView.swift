@@ -6,12 +6,20 @@
 //
 
 import SwiftData
+import Core
 import SwiftUI
 
 /// Renders saved projects and forwards open/delete actions through project-selection state.
-struct ProjectSelectionView: View {
+public struct ProjectSelectionView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(\.appCoordinator) private var appCoordinator
+
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
     @Query(sort: \Project.createdAt, order: .reverse) private var projects: [Project]
 
     @State private var errorMessage: String?
@@ -19,30 +27,38 @@ struct ProjectSelectionView: View {
     @State private var selectedProjectGroup: ProjectGroup = .inProgress
     @State private var searchText = ""
 
+    public init() {}
+
     private var presentation: ProjectSelectionViewModel {
         ProjectSelectionViewModel(
             projects: projects,
             selectedGroup: selectedProjectGroup,
             searchText: searchText,
-            moduleCatalog: appCoordinator.moduleCatalog,
+            moduleCatalog: coordinator.moduleCatalog,
             auditProgress: { project in
-                ProjectSelectionViewModel.auditProgress(
-                    for: project,
-                    modelContext: modelContext,
-                    projectScanService: appCoordinator.dependencies.projectScanService
-                )
+                coordinator.moduleCatalog
+                    .module(for: ModuleID(rawValue: project.moduleID))?
+                    .projectSelectionProgress(
+                        for: project,
+                        modelContext: modelContext,
+                        projectScanService: coordinator.dependencies.projectScanService
+                    ) ?? ProjectSelectionViewModel.auditProgress(
+                        for: project,
+                        modelContext: modelContext,
+                        projectScanService: coordinator.dependencies.projectScanService
+                    )
             },
             summary: { project in
                 ProjectSelectionViewModel.summary(
                     for: project,
-                    projectScanService: appCoordinator.dependencies.projectScanService
+                    projectScanService: coordinator.dependencies.projectScanService
                 )
             },
             folderExists: ProjectSelectionViewModel.projectFolderExists(_:)
         )
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             TopBarView()
 
@@ -74,7 +90,7 @@ struct ProjectSelectionView: View {
             presentation.preheatLatestProjectPreviews(
                 projects: projects,
                 modelContext: modelContext,
-                dependencies: appCoordinator.dependencies
+                dependencies: coordinator.dependencies
             )
         }
         .alert(
@@ -113,7 +129,7 @@ struct ProjectSelectionView: View {
             Spacer()
 
             Button {
-                appCoordinator.openDataTypeSelection()
+                coordinator.openDataTypeSelection()
             } label: {
                 Label(Strings.ProjectSelection.newProjectButton, systemImage: Icons.add)
                     .font(Fonts.body.weight(.semibold))
@@ -135,7 +151,7 @@ struct ProjectSelectionView: View {
                 .multilineTextAlignment(.center)
 
             Button(Strings.ProjectSelection.newProjectButton) {
-                appCoordinator.openDataTypeSelection()
+                coordinator.openDataTypeSelection()
             }
             .buttonStyle(.primaryAction)
         }
@@ -276,7 +292,7 @@ struct ProjectSelectionView: View {
     }
 
     private func openProject(_ project: Project, folderExists: Bool) {
-        presentation.openProject(project, folderExists: folderExists, coordinator: appCoordinator)
+        presentation.openProject(project, folderExists: folderExists, coordinator: coordinator)
     }
 
     private func confirmProjectDeletion() {
@@ -291,7 +307,7 @@ struct ProjectSelectionView: View {
         errorMessage = presentation.deleteProject(
             project,
             modelContext: modelContext,
-            dependencies: appCoordinator.dependencies
+            dependencies: coordinator.dependencies
         )
         self.projectIDPendingDeletion = nil
     }

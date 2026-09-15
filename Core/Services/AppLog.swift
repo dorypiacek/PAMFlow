@@ -8,7 +8,7 @@
 import Foundation
 
 /// Logging boundary for services and models.
-protocol AppLogging {
+public protocol AppLogging {
     static func info(_ message: String)
     static func scan(_ message: String)
     static func module(_ name: String, _ message: String)
@@ -18,16 +18,16 @@ protocol AppLogging {
 ///
 /// Centralizing log formatting makes it easier to replace `print` with OSLog
 /// later without touching feature code.
-enum AppLog: AppLogging {
-    nonisolated static func info(_ message: String) {
+public enum AppLog: AppLogging {
+    public nonisolated static func info(_ message: String) {
         print("[PAMFlow] \(timestamp()) \(message)")
     }
 
-    nonisolated static func scan(_ message: String) {
+    public nonisolated static func scan(_ message: String) {
         print("[PAMFlow][Scan] \(timestamp()) \(message)")
     }
 
-    nonisolated static func module(_ name: String, _ message: String) {
+    public nonisolated static func module(_ name: String, _ message: String) {
         print("[PAMFlow][\(name)] \(timestamp()) \(message)")
     }
 

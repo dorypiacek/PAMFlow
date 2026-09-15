@@ -6,36 +6,36 @@
 //
 
 /// Metadata values captured by the shared project setup screen.
-struct ProjectMetadataValues: Hashable, Sendable {
+public struct ProjectMetadataValues: Hashable, Sendable {
     private var valuesByFieldID: [String: String]
 
-    init(_ valuesByFieldID: [String: String] = [:]) {
+    public init(_ valuesByFieldID: [String: String] = [:]) {
         self.valuesByFieldID = valuesByFieldID
     }
 
-    func value(for fieldID: String) -> String {
+    public func value(for fieldID: String) -> String {
         valuesByFieldID[fieldID] ?? ""
     }
 
     /// Returns the captured values keyed by module-owned field identifiers.
-    func dictionary() -> [String: String] {
+    public func dictionary() -> [String: String] {
         valuesByFieldID
     }
 
-    mutating func setValue(_ value: String, for fieldID: String) {
+    public mutating func setValue(_ value: String, for fieldID: String) {
         valuesByFieldID[fieldID] = value
     }
 }
 
 /// Generic metadata field requested by a feature module during setup.
-struct ProjectMetadataField: Hashable, Sendable {
-    let id: String
-    let title: String
-    let isRequired: Bool
-    let valueType: ProjectMetadataValueType
-    let csvAliases: [String]
+public struct ProjectMetadataField: Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let isRequired: Bool
+    public let valueType: ProjectMetadataValueType
+    public let csvAliases: [String]
 
-    init(
+    public init(
         id: String,
         title: String,
         isRequired: Bool,
@@ -51,7 +51,7 @@ struct ProjectMetadataField: Hashable, Sendable {
 }
 
 /// Value type used by the shared project metadata editor.
-enum ProjectMetadataValueType: Hashable, Sendable {
+public enum ProjectMetadataValueType: Hashable, Sendable {
     case string
     case number
     case date

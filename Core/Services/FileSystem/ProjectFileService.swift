@@ -9,7 +9,7 @@ import Foundation
 
 /// File-system project creation and cleanup operations needed by feature models.
 @MainActor
-protocol ProjectFileServicing {
+public protocol ProjectFileServicing {
     func createProject(
         named projectName: String,
         inputSelection: ProjectInputSourceSelection,
@@ -32,7 +32,9 @@ protocol ProjectFileServicing {
 ///
 /// This service owns file-system setup only. It does not persist project
 /// metadata and does not update UI state.
-final class ProjectFileService: ProjectFileServicing {
+public final class ProjectFileService: ProjectFileServicing {
+    public init() {}
+
     enum ProjectFileError: LocalizedError {
         case failedToAccessFolder(URL)
         case failedToAccessFile(URL)
@@ -56,7 +58,7 @@ final class ProjectFileService: ProjectFileServicing {
         }
     }
 
-    func createProject(
+    public func createProject(
         named projectName: String,
         inLibraryFolder libraryURL: URL,
         fromInputFolder inputFolderURL: URL,
@@ -70,7 +72,7 @@ final class ProjectFileService: ProjectFileServicing {
         )
     }
 
-    func createProject(
+    public func createProject(
         named projectName: String,
         inLibraryFolder libraryURL: URL,
         inputSelection: ProjectInputSourceSelection,
@@ -83,7 +85,7 @@ final class ProjectFileService: ProjectFileServicing {
         )
     }
 
-    func createProject(
+    public func createProject(
         named projectName: String,
         inputSelection: ProjectInputSourceSelection,
         moduleID: String
@@ -96,7 +98,7 @@ final class ProjectFileService: ProjectFileServicing {
         )
     }
 
-    func createProject(
+    public func createProject(
         named projectName: String,
         inputSelection: ProjectInputSourceSelection,
         moduleID: String,
@@ -226,7 +228,7 @@ final class ProjectFileService: ProjectFileServicing {
         inputSelection.rawMediaFolderURL ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    func suggestedProjectName(from inputFolderURL: URL, projectNamePrefix: String) -> String {
+    public func suggestedProjectName(from inputFolderURL: URL, projectNamePrefix: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
         return "PAMFlow_\(projectNamePrefix)_\(formatter.string(from: Date()))"
@@ -327,7 +329,7 @@ final class ProjectFileService: ProjectFileServicing {
         }
     }
 
-    func deleteProjectFolder(for project: Project) throws {
+    public func deleteProjectFolder(for project: Project) throws {
         guard let rootFolderURL = project.rootFolderURL else { return }
 
         let accessed = rootFolderURL.startAccessingSecurityScopedResource()
@@ -342,7 +344,7 @@ final class ProjectFileService: ProjectFileServicing {
         }
     }
 
-    func removeTemporaryArtifacts(for project: Project) throws {
+    public func removeTemporaryArtifacts(for project: Project) throws {
         guard let rootFolderURL = project.rootFolderURL else { return }
 
         let accessed = rootFolderURL.startAccessingSecurityScopedResource()

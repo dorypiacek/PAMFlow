@@ -6,23 +6,35 @@
 //
 
 import SwiftUI
+import Core
 
 /// Shared application top bar with navigation, user identity, and settings.
-struct TopBarView: View {
-    @Environment(AppCoordinator.self) private var appCoordinator
+public struct TopBarView: View {
+    @Environment(\.appCoordinator) private var appCoordinator
+
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
     @State private var isShowingSettings = false
 
-    var backAction: (() -> Void)?
+    public var backAction: (() -> Void)?
 
-    var body: some View {
+    public init(backAction: (() -> Void)? = nil) {
+        self.backAction = backAction
+    }
+
+    public var body: some View {
         HStack {
             HStack(spacing: Spacing.small) {
-                if appCoordinator.canGoBack {
+                if coordinator.canGoBack {
                     Button {
                         if let backAction {
                             backAction()
                         } else {
-                            appCoordinator.goBack()
+                            coordinator.goBack()
                         }
                     } label: {
                         Image(systemName: Icons.back)
@@ -31,9 +43,9 @@ struct TopBarView: View {
                     .help(CommonStrings.back)
                 }
 
-                if appCoordinator.canGoHome {
+                if coordinator.canGoHome {
                     Button {
-                        appCoordinator.goHome()
+                        coordinator.goHome()
                     } label: {
                         Image(systemName: Icons.home)
                     }
@@ -48,7 +60,7 @@ struct TopBarView: View {
                 isShowingSettings = true
             } label: {
                 HStack(spacing: Spacing.small) {
-                Text("\(CommonStrings.loggedInPrefix) \(appCoordinator.userProfile?.name ?? CommonStrings.unknownUser)")
+                Text("\(CommonStrings.loggedInPrefix) \(coordinator.userProfile?.name ?? CommonStrings.unknownUser)")
                     .foregroundStyle(.secondary)
 
                     Image(systemName: Icons.settings)

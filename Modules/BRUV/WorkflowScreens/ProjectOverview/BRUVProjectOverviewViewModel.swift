@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import SwiftUI
 
 /// Visual project overview behavior layered on top of the shared overview ViewModel.
@@ -33,10 +35,18 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
     override var fileLabel: String {
         switch projectType {
         case .bruv:
-            Strings.NewProjectOverview.videoFiles
+            BRUVStrings.ProjectOverview.videoFiles
         case .ruv:
             Strings.NewProjectOverview.imageFiles
         }
+    }
+
+    override var screenTitle: String {
+        BRUVStrings.ProjectOverview.title
+    }
+
+    override var screenSubtitle: String {
+        BRUVStrings.ProjectOverview.subtitle
     }
 
     override var showsModuleProcessingStatus: Bool {
@@ -71,7 +81,7 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
         )
         if projectType == .bruv {
             metrics.insert(
-                HighlightMetric(Strings.NewProjectOverview.frameRates, frameRates(summary)),
+                HighlightMetric(BRUVStrings.ProjectOverview.frameRates, frameRates(summary)),
                 at: min(3, metrics.count)
             )
         }
@@ -95,7 +105,7 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
                 NewProjectOverviewMetric(title: Strings.NewProjectOverview.durationRange, value: durationRange(summary)),
                 NewProjectOverviewMetric(title: Strings.NewProjectOverview.formats, value: formattedStrings(summary.formats)),
                 NewProjectOverviewMetric(title: Strings.NewProjectOverview.resolutions, value: formattedStrings(summary.resolutions)),
-                NewProjectOverviewMetric(title: Strings.NewProjectOverview.frameRates, value: frameRates(summary)),
+                NewProjectOverviewMetric(title: BRUVStrings.ProjectOverview.frameRates, value: frameRates(summary)),
                 NewProjectOverviewMetric(title: Strings.NewProjectOverview.frameCountRange, value: frameCountRange(summary))
             ]
         case .ruv:
@@ -106,6 +116,12 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
             ]
         }
         metrics.insert(contentsOf: visualMetrics, at: max(0, metrics.count - 1))
+        if let progressIndex = metrics.firstIndex(where: { $0.title == Strings.NewProjectOverview.manualAuditProgress }) {
+            metrics[progressIndex] = NewProjectOverviewMetric(
+                title: BRUVStrings.ProjectOverview.detectionReviewProgress,
+                value: manualAuditProgress
+            )
+        }
         return metrics
     }
 
@@ -116,11 +132,11 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
 
         switch project.workflowStatus {
         case .manualAuditInProgress:
-            return Strings.NewProjectOverview.continueFrameReviewButton
+            return BRUVStrings.ProjectOverview.continueDetectionReview
         case .manualAuditCompleted:
-            return Strings.NewProjectOverview.openFrameReviewOverviewButton
+            return BRUVStrings.ProjectOverview.openDetectionOverview
         default:
-            return Strings.NewProjectOverview.startFrameReviewButton
+            return BRUVStrings.ProjectOverview.startDetectionReview
         }
     }
 
@@ -146,7 +162,7 @@ final class BRUVProjectOverviewViewModel: NewProjectOverviewViewModel {
         if project.workflowStatus == .scanCompleted {
             return (Strings.NewProjectOverview.readyForProcessing, AppColors.success)
         }
-        return (Strings.NewProjectOverview.ready, AppColors.success)
+        return (BRUVStrings.ProjectOverview.ready, AppColors.success)
     }
 
     private func frameRates(_ summary: ProjectScanSummary) -> String {

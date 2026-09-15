@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import Core
 
-struct ClickablePathText: View {
-    let path: String
-    var lineLimit: Int = 2
+public struct ClickablePathText: View {
+    public let path: String
+    public var lineLimit: Int = 2
 
-    var body: some View {
+    public var body: some View {
         Button {
             openInFinder()
         } label: {

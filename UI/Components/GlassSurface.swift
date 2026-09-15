@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import Core
 
 /// Applies PAMFlow's shared translucent surface treatment to grouped content.
 private struct GlassSurfaceModifier: ViewModifier {
-    let cornerRadius: CGFloat
+    public let cornerRadius: CGFloat
 
-    func body(content: Content) -> some View {
+    public func body(content: Content) -> some View {
         content
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -31,7 +32,7 @@ private struct GlassSurfaceModifier: ViewModifier {
 
 extension View {
     /// Places content on a native Liquid Glass surface with shared geometry.
-    func glassySurface(
+    public func glassySurface(
         cornerRadius: CGFloat = Metrics.Layout.glassCornerRadius
     ) -> some View {
         modifier(GlassSurfaceModifier(cornerRadius: cornerRadius))

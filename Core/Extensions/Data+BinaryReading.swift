@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension Data {
+public extension Data {
     nonisolated func readInt32(at offset: Int) -> Int32? {
         guard offset >= 0, offset + 4 <= count else { return nil }
         let value = (UInt32(self[offset]) << 24)
@@ -27,7 +27,7 @@ extension Data {
     }
 }
 
-extension Data.SubSequence {
+public extension Data.SubSequence {
     nonisolated func readInt32(atRelativeOffset relativeOffset: Int) -> Int32? {
         let offset = startIndex + relativeOffset
         guard relativeOffset >= 0, offset + 4 <= endIndex else { return nil }

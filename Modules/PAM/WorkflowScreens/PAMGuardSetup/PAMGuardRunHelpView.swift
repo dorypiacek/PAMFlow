@@ -6,6 +6,8 @@
 //
 
 import AppKit
+import UI
+import Core
 import SwiftUI
 
 /// Renders step-by-step instructions for running the generated PAMGuard template outside the app.
@@ -107,14 +109,20 @@ private struct PAMGuardHelpImage: View {
     }
 
     private func loadImage() -> NSImage? {
-        let nestedURL = Bundle.main.url(
+        let packageFlatURL = Bundle.module.url(forResource: name, withExtension: Assets.imageExtension)
+        let packageNestedURL = Bundle.module.url(
             forResource: name,
             withExtension: Assets.imageExtension,
             subdirectory: Assets.imageSubdirectory
         )
-        let flatURL = Bundle.main.url(forResource: name, withExtension: Assets.imageExtension)
+        let appNestedURL = Bundle.main.url(
+            forResource: name,
+            withExtension: Assets.imageExtension,
+            subdirectory: Assets.imageSubdirectory
+        )
+        let appFlatURL = Bundle.main.url(forResource: name, withExtension: Assets.imageExtension)
 
-        guard let url = nestedURL ?? flatURL else {
+        guard let url = packageFlatURL ?? packageNestedURL ?? appNestedURL ?? appFlatURL else {
             return nil
         }
 

@@ -6,36 +6,59 @@
 //
 
 import SwiftUI
+import Core
 
 /// Optional species metadata attached to one reviewed detection.
-struct SpeciesSelection: Codable, Equatable, Identifiable {
-    var id: String = UUID().uuidString
-    var family: String?
-    var genus: String?
-    var species: String?
-    var fullName: String
+public struct SpeciesSelection: Codable, Equatable, Identifiable {
+    public var id: String = UUID().uuidString
+    public var family: String?
+    public var genus: String?
+    public var species: String?
+    public var fullName: String
+
+    public init(id: String = UUID().uuidString, family: String?, genus: String?, species: String?, fullName: String) {
+        self.id = id
+        self.family = family
+        self.genus = genus
+        self.species = species
+        self.fullName = fullName
+    }
 }
 
 /// Editable species state for one detected individual in a reviewed item.
-struct SpeciesAssignmentDraft: Equatable, Identifiable {
-    let id: String
-    let primaryLabel: String
-    let secondaryLabel: String
-    var selection: SpeciesSelection?
-    var isRemoved: Bool
+public struct SpeciesAssignmentDraft: Equatable, Identifiable {
+    public let id: String
+    public let primaryLabel: String
+    public let secondaryLabel: String
+    public var selection: SpeciesSelection?
+    public var isRemoved: Bool
+
+    public init(
+        id: String,
+        primaryLabel: String,
+        secondaryLabel: String,
+        selection: SpeciesSelection?,
+        isRemoved: Bool
+    ) {
+        self.id = id
+        self.primaryLabel = primaryLabel
+        self.secondaryLabel = secondaryLabel
+        self.selection = selection
+        self.isRemoved = isRemoved
+    }
 }
 
 /// Edits one species assignment per detected individual in the current review item.
-struct SpeciesSelectionSheet: View {
-    let taxa: [SpeciesTaxon]
-    let onSave: ([SpeciesAssignmentDraft]) -> Void
-    let onClose: () -> Void
+public struct SpeciesSelectionSheet: View {
+    public let taxa: [SpeciesTaxon]
+    public let onSave: ([SpeciesAssignmentDraft]) -> Void
+    public let onClose: () -> Void
 
     @State private var drafts: [SpeciesAssignmentDraft]
     @State private var showsDiscardAlert = false
     private let initialDrafts: [SpeciesAssignmentDraft]
 
-    init(
+    public init(
         taxa: [SpeciesTaxon],
         drafts: [SpeciesAssignmentDraft],
         onSave: @escaping ([SpeciesAssignmentDraft]) -> Void,
@@ -48,7 +71,7 @@ struct SpeciesSelectionSheet: View {
         _drafts = State(initialValue: drafts)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.large) {
             header
             VStack(alignment: .leading, spacing: Spacing.small + Spacing.xSmall) {
@@ -82,7 +105,7 @@ struct SpeciesSelectionSheet: View {
             Button {
                 drafts == initialDrafts ? onClose() : (showsDiscardAlert = true)
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: Icons.close)
             }
             .buttonStyle(.iconAction)
         }
@@ -107,7 +130,7 @@ struct SpeciesSelectionSheet: View {
 /// A searchable, reversible assignment row for one tracked individual.
 private struct SpeciesAssignmentRow: View {
     @Binding var draft: SpeciesAssignmentDraft
-    let taxa: [SpeciesTaxon]
+    public let taxa: [SpeciesTaxon]
 
     @State private var searchText = ""
     @State private var hoveredTaxonID: String?
@@ -116,7 +139,7 @@ private struct SpeciesAssignmentRow: View {
     @State private var genus: String?
     @State private var species: String?
 
-    var body: some View {
+    public var body: some View {
         HStack(alignment: .top, spacing: Spacing.medium) {
             idCell
             confidenceCell
@@ -161,7 +184,7 @@ private struct SpeciesAssignmentRow: View {
     }
 
     private var taxonomyButton: some View {
-        Button { isShowingTaxonomy = true } label: { Image(systemName: "plus") }
+        Button { isShowingTaxonomy = true } label: { Image(systemName: Icons.plus) }
             .buttonStyle(.iconAction)
             .disabled(draft.isRemoved)
             .frame(width: Metrics.Layout.speciesActionColumnWidth, alignment: .trailing)

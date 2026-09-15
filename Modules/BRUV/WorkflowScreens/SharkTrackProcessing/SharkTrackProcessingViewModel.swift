@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 import Observation
 import SwiftData
 
@@ -60,7 +62,7 @@ final class SharkTrackProcessingViewModel: SharkTrackProcessingViewModelType {
 
     /// Identifier of the project being processed.
     private let projectID: UUID
-    /// Service that prepares SharkTrack output for manual audit.
+    /// Service that prepares SharkTrack output for detection review.
     private let sharkTrackService: SharkTrackServicing
     /// Service used to reload the scan summary after SharkTrack processing.
     private let projectScanService: ProjectScanServicing

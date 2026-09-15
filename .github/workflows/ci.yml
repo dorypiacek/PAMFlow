@@ -30,11 +30,38 @@ jobs:
             -project PAMFlow.xcodeproj \
             -scheme PAMFlow
 
-      - name: Build
+      - name: Build Swift packages
+        run: |
+          swift build --package-path Core
+          swift build --package-path UI
+          swift build --package-path Modules/PAM
+          swift build --package-path Modules/BRUV
+
+      - name: Build app
         run: |
           xcodebuild \
             -project PAMFlow.xcodeproj \
             -scheme PAMFlow \
             -configuration Debug \
             -destination 'platform=macOS' \
+            build
+
+      - name: Build PAM-only app variant
+        run: |
+          xcodebuild \
+            -project PAMFlow.xcodeproj \
+            -scheme PAMFlow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PAMFLOW_CUSTOM_MODULE_SELECTION PAMFLOW_INCLUDE_PAM' \
+            build
+
+      - name: Build BRUV/RUV-only app variant
+        run: |
+          xcodebuild \
+            -project PAMFlow.xcodeproj \
+            -scheme PAMFlow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PAMFLOW_CUSTOM_MODULE_SELECTION PAMFLOW_INCLUDE_BRUV' \
             build

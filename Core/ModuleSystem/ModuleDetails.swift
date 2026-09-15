@@ -8,17 +8,17 @@
 import Foundation
 
 /// Display and file-selection details for a feature module included in the app.
-struct ModuleDetails: Hashable, Sendable {
-    let id: ModuleID
-    let name: String
-    let subtitle: String
-    let iconName: String
-    let projectNamePrefix: String
-    let libraryFolderName: String
-    let supportedFileExtensions: Set<String>
-    let generatedArtifactFolderNames: Set<String>
+public struct ModuleDetails: Hashable, Sendable {
+    public let id: ModuleID
+    public let name: String
+    public let subtitle: String
+    public let iconName: String
+    public let projectNamePrefix: String
+    public let libraryFolderName: String
+    public let supportedFileExtensions: Set<String>
+    public let generatedArtifactFolderNames: Set<String>
 
-    init(
+    public init(
         id: ModuleID,
         name: String,
         subtitle: String,

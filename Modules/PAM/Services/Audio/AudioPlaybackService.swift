@@ -56,9 +56,9 @@ protocol AudioPlaybackServicing: AnyObject {
 /// The service keeps AVFoundation state out of SwiftUI views and exposes
 /// display-friendly playback timing for smooth scrubber and playhead updates.
 @MainActor
-final class AudioPlaybackService: NSObject, ObservableObject, AudioPlaybackServicing, AVAudioPlayerDelegate {
-    @Published private(set) var isPlaying = false
-    @Published private(set) var duration: TimeInterval = 0
+public final class AudioPlaybackService: NSObject, ObservableObject, AudioPlaybackServicing, AVAudioPlayerDelegate {
+    @Published public private(set) var isPlaying = false
+    @Published public private(set) var duration: TimeInterval = 0
     @Published var currentTime: TimeInterval = 0
 
     private var player: AVAudioPlayer?
@@ -189,7 +189,7 @@ final class AudioPlaybackService: NSObject, ObservableObject, AudioPlaybackServi
         securityScopedURL = nil
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    public nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             stop()
         }

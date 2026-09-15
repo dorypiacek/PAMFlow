@@ -6,13 +6,14 @@
 //
 
 import SwiftUI
+import Core
 
 /// Shared text field treatment that matches PAMFlow's translucent glass controls.
-struct AppTextFieldStyle: TextFieldStyle {
+public struct AppTextFieldStyle: TextFieldStyle {
     @FocusState private var isFocused: Bool
-    var verticalPadding: CGFloat = 0
+    public var verticalPadding: CGFloat = 0
 
-    func _body(configuration: TextField<Self._Label>) -> some View {
+    public func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .textFieldStyle(.plain)
             .focused($isFocused)
@@ -41,12 +42,12 @@ struct AppTextFieldStyle: TextFieldStyle {
 
 extension TextFieldStyle where Self == AppTextFieldStyle {
     /// Glassy app-native style for text entry controls.
-    static var appGlass: AppTextFieldStyle {
+    public static var appGlass: AppTextFieldStyle {
         AppTextFieldStyle()
     }
 
     /// Taller glassy style for multiline controls that need breathing room.
-    static var appGlassMultiline: AppTextFieldStyle {
+    public static var appGlassMultiline: AppTextFieldStyle {
         AppTextFieldStyle(verticalPadding: Spacing.small)
     }
 }

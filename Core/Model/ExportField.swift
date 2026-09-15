@@ -6,12 +6,12 @@
 //
 
 /// Generic export field declaration for the shared CSV exporter.
-struct CSVExportFieldDescriptor: Hashable, Sendable {
-    let id: String
-    let title: String
-    let isDefault: Bool
+public struct CSVExportFieldDescriptor: Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let isDefault: Bool
 
-    init(id: String, title: String, isDefault: Bool) {
+    public init(id: String, title: String, isDefault: Bool) {
         self.id = id
         self.title = title
         self.isDefault = isDefault

@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import Core
+import UI
 
 /// Shared app services injected into app screens and feature modules.
 @MainActor

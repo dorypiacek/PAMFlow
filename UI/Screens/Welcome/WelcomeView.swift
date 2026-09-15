@@ -6,15 +6,25 @@
 //
 
 import SwiftUI
+import Core
 
 /// First-run setup screen for the user name.
-struct WelcomeView: View {
-    @Environment(AppCoordinator.self) private var appCoordinator
+public struct WelcomeView: View {
+    @Environment(\.appCoordinator) private var appCoordinator
+
+    private var coordinator: any AppCoordinating {
+        guard let appCoordinator else {
+            fatalError("App coordinator must be injected before rendering shared UI")
+        }
+        return appCoordinator
+    }
     @State private var name = ""
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         VStack(spacing: Spacing.large) {
-            Image(systemName: "waveform")
+            Image(systemName: Icons.app)
                 .font(.system(size: 80, weight: .light))
 
             VStack(spacing: Spacing.small) {
@@ -42,7 +52,7 @@ struct WelcomeView: View {
         .frame(minWidth: 720, minHeight: 520)
         .background(AppColors.background)
         .onAppear {
-            name = appCoordinator.userProfile?.name ?? ""
+            name = coordinator.userProfile?.name ?? ""
         }
     }
 
@@ -51,6 +61,6 @@ struct WelcomeView: View {
     }
 
     private func save() {
-        appCoordinator.saveUserName(name)
+        coordinator.saveUserName(name)
     }
 }

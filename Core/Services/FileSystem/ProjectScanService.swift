@@ -9,7 +9,7 @@ import Foundation
 
 /// Scan operations and summary loading used across processing and overview screens.
 @MainActor
-protocol ProjectScanServicing {
+public protocol ProjectScanServicing {
     /// Discovers source files that match a module-provided extension list.
     func scanInventory(
         project: Project,
@@ -35,17 +35,17 @@ protocol ProjectScanServicing {
 /// folders, enumerating files, emitting progress, and serializing the shared
 /// summary format. Feature modules decide which file types to include and how to
 /// analyze each file before asking Core to write the final summary.
-final class ProjectScanService: ProjectScanServicing {
-    init() {}
+public final class ProjectScanService: ProjectScanServicing {
+    public init() {}
 
     /// User-visible scan progress emitted by the scanner process.
-    struct Progress: Sendable {
-        let currentFileIndex: Int?
-        let totalFileCount: Int?
-        let currentFile: String?
-        let message: String
+    public struct Progress: Sendable {
+        public let currentFileIndex: Int?
+        public let totalFileCount: Int?
+        public let currentFile: String?
+        public let message: String
 
-        var fractionCompleted: Double? {
+        public var fractionCompleted: Double? {
             guard
                 let currentFileIndex,
                 let totalFileCount,
@@ -66,17 +66,17 @@ final class ProjectScanService: ProjectScanServicing {
         var errorDescription: String? {
             switch self {
             case .missingProjectFolder:
-                Strings.ProjectScan.missingProjectFolder
+                "The project folder could not be accessed."
             case .missingInputFolder:
-                Strings.ProjectScan.missingInputFolder
+                "The input folder could not be accessed."
             case .missingSummary(let url):
-                String(format: Strings.ProjectScan.missingSummaryFormat, url.path)
+                "The scan summary could not be found at \(url.path)."
             }
         }
     }
 
     /// Resolves a project folder and inventories files supported by the calling module.
-    func scanInventory(
+    public func scanInventory(
         project: Project,
         supportedFileExtensions: Set<String>,
         onProgress: @escaping @Sendable (Progress) -> Void = { _ in }
@@ -97,13 +97,14 @@ final class ProjectScanService: ProjectScanServicing {
         AppLog.info("Resolved input folder: \(inputFolderURL.path)")
         AppLog.info("Resolved raw input folder: \(displayInputFolderURL.path)")
 
+        let recorderID = project.metadataSummaryValue ?? ""
         let inventory = try await Task.detached {
             try self.scanProjectFiles(
                 supportedFileExtensions: supportedFileExtensions,
                 projectRootURL: projectRootURL,
                 inputFolderURL: inputFolderURL,
                 displayInputFolderURL: displayInputFolderURL,
-                recorderID: project.metadataSummaryValue ?? "",
+                recorderID: recorderID,
                 onProgress: onProgress
             )
         }.value
@@ -113,7 +114,7 @@ final class ProjectScanService: ProjectScanServicing {
     }
 
     /// Builds and writes the shared scan summary after a module analyzes the inventory.
-    func makeSummary(
+    public func makeSummary(
         inventory: ProjectScanInventory,
         analyzedFiles: [ProjectScanFile],
         warnings: [String],
@@ -131,7 +132,7 @@ final class ProjectScanService: ProjectScanServicing {
     }
 
     /// Loads the scan summary that was previously written into the project work folder.
-    func loadSummary(for project: Project) throws -> ProjectScanSummary {
+    public func loadSummary(for project: Project) throws -> ProjectScanSummary {
         AppLog.info("Loading scan summary for project '\(project.name)'")
         let loadedSummaryData: Data
         if let projectRootURL = project.rootFolderURL,
@@ -211,8 +212,8 @@ final class ProjectScanService: ProjectScanServicing {
             totalFileCount: mediaURLs.count,
             currentFile: nil,
             message: mediaURLs.isEmpty
-                ? Strings.ProjectScan.noSupportedFilesFound
-                : String(format: Strings.ProjectScan.supportedFilesFoundFormat, mediaURLs.count)
+                ? "No supported files found."
+                : "Found \(mediaURLs.count) supported files."
         ))
 
         var files: [ProjectScanFileInfo] = []
@@ -224,7 +225,7 @@ final class ProjectScanService: ProjectScanServicing {
                 currentFileIndex: index,
                 totalFileCount: mediaURLs.count,
                 currentFile: relativePath,
-                message: String(format: Strings.ProjectScan.scanningFileFormat, index, mediaURLs.count)
+                message: "Scanning file \(index) of \(mediaURLs.count)."
             ))
 
             files.append(fileInfo(for: url, inputFolderURL: inputFolderURL))
@@ -310,7 +311,7 @@ final class ProjectScanService: ProjectScanServicing {
         )
     }
 
-    nonisolated static func writeSummary(_ summary: ProjectScanSummary, projectRootURL: URL) throws {
+    public nonisolated static func writeSummary(_ summary: ProjectScanSummary, projectRootURL: URL) throws {
         let workURL = projectRootURL.appendingPathComponent(ProjectFileNames.workDirectory)
         try FileManager.default.createDirectory(at: workURL, withIntermediateDirectories: true)
 
@@ -318,7 +319,7 @@ final class ProjectScanService: ProjectScanServicing {
         try data.write(to: workURL.appendingPathComponent(ProjectFileNames.scanSummary), options: .atomic)
     }
 
-    nonisolated static func encodedSummaryData(_ summary: ProjectScanSummary) throws -> Data {
+    public nonisolated static func encodedSummaryData(_ summary: ProjectScanSummary) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Core
 import Observation
 import SwiftData
 
@@ -26,15 +27,15 @@ protocol ScanProjectViewModelType: AnyObject {
     var showsCancelWarning: Bool { get set }
 
     /// Starts scanning the selected project and advances the workflow when scanning completes.
-    func scanProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async
+    func scanProject(modelContext: ModelContext, coordinator: AppCoordinating) async
     /// Deletes the partially created project and returns the user to the module setup flow.
-    func removeProjectAndReturnToSetup(modelContext: ModelContext, appCoordinator: AppCoordinating)
+    func removeProjectAndReturnToSetup(modelContext: ModelContext, coordinator: AppCoordinating)
 }
 
 /// View model that owns scan execution, progress reporting, and cancellation cleanup.
 @Observable
 @MainActor
-final class ScanProjectViewModel: ScanProjectViewModelType {
+public final class ScanProjectViewModel: ScanProjectViewModelType {
     /// User-facing failure text from scanning or project removal.
     var errorMessage: String?
     /// Indicates whether a scan is currently running and prevents duplicate starts.
@@ -58,7 +59,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
     private var didDiscardDuringScan = false
 
     /// Creates scan state for a persisted project and the owning module's scan behavior.
-    init(
+    public init(
         projectID: UUID,
         supportedFileExtensions: Set<String>,
         scanAnalyzer: ProjectScanAnalyzing
@@ -69,7 +70,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
     }
 
     /// Runs Core file discovery, applies module analysis, persists the summary, and opens the next workflow step.
-    func scanProject(modelContext: ModelContext, appCoordinator: AppCoordinating) async {
+    func scanProject(modelContext: ModelContext, coordinator: AppCoordinating) async {
         AppLog.info("ScanProjectView.task fired for projectID=\(projectID.uuidString)")
         guard !isScanning, let project = fetchProject(modelContext: modelContext) else {
             AppLog.info("ScanProjectView skipped scan. isScanning=\(isScanning), projectFound=\(fetchProject(modelContext: modelContext) != nil)")
@@ -88,7 +89,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             try modelContext.save()
 
             AppLog.info("ScanProjectView calling ProjectScanService.scanInventory")
-            let inventory = try await appCoordinator.dependencies.projectScanService.scanInventory(
+            let inventory = try await coordinator.dependencies.projectScanService.scanInventory(
                 project: project,
                 supportedFileExtensions: supportedFileExtensions
             ) { progress in
@@ -102,7 +103,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             let analyzedFiles = await analyzeFiles(inventory.files)
             let totalSizeBytes = analyzedFiles.reduce(0) { $0 + $1.sizeBytes }
             let warnings = scanAnalyzer.warnings(files: analyzedFiles, totalSizeBytes: totalSizeBytes)
-            let summary = try appCoordinator.dependencies.projectScanService.makeSummary(
+            let summary = try coordinator.dependencies.projectScanService.makeSummary(
                 inventory: inventory,
                 analyzedFiles: analyzedFiles,
                 warnings: warnings,
@@ -125,7 +126,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             try modelContext.save()
 
             AppLog.info("ScanProjectView opening next workflow step")
-            appCoordinator.goToNextStep(for: project)
+            coordinator.goToNextStep(for: project)
         } catch {
             AppLog.info("ScanProjectView scan failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -135,16 +136,16 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
     }
 
     /// Removes the persisted project and project folder when the user cancels during scanning.
-    func removeProjectAndReturnToSetup(modelContext: ModelContext, appCoordinator: AppCoordinating) {
+    func removeProjectAndReturnToSetup(modelContext: ModelContext, coordinator: AppCoordinating) {
         AppLog.info("ScanProjectView removing project and returning to setup")
         didDiscardDuringScan = true
         guard let project = fetchProject(modelContext: modelContext) else {
-            appCoordinator.openProjectSelection()
+            coordinator.openProjectSelection()
             return
         }
 
         do {
-            try appCoordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
+            try coordinator.dependencies.projectFileService.deleteProjectFolder(for: project)
             modelContext.delete(project)
             try modelContext.save()
         } catch {
@@ -152,7 +153,7 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
             return
         }
 
-        appCoordinator.openModule(moduleID: ModuleID(rawValue: project.moduleID))
+        coordinator.openModule(moduleID: ModuleID(rawValue: project.moduleID))
     }
 
     private func fetchProject(modelContext: ModelContext) -> Project? {
@@ -168,7 +169,12 @@ final class ScanProjectViewModel: ScanProjectViewModelType {
     private func analyzeFiles(_ files: [ProjectScanFileInfo]) async -> [ProjectScanFile] {
         var analyzedFiles: [ProjectScanFile] = []
         analyzedFiles.reserveCapacity(files.count)
-        for file in files {
+        for (offset, file) in files.enumerated() {
+            let index = offset + 1
+            scanMessage = "Analyzing file \(index) of \(files.count)."
+            currentFileName = file.relativePath
+            progressFraction = files.isEmpty ? nil : Double(index) / Double(files.count)
+            await Task.yield()
             analyzedFiles.append(await scanAnalyzer.analyzeFile(file))
         }
         return analyzedFiles

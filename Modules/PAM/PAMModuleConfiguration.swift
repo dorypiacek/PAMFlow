@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UI
+import Core
 
 /// Configuration for audio projects handled by this module.
 @MainActor
@@ -34,10 +36,11 @@ enum PAMModuleConfiguration {
     static func makeSetupConfiguration() -> ProjectSetupConfiguration {
         ProjectSetupConfiguration(
             module: details,
-            metadataUploadMessage: Strings.ProjectSetup.pamMetadataUploadMessage,
+            metadataUploadMessage: PAMStrings.ProjectSetup.metadataUploadMessage,
             metadataCacheKey: "pamflow.\(details.id.rawValue).metadata.csv.bookmark",
             requiredMetadataFields: metadataFields,
             metadataSelectionFieldID: PAMMetadataFieldID.opcode,
+            selectableFileExtensions: PAMMediaFileExtensions.audio,
             isMetadataComplete: { values in
                 PAMMetadataFieldID.requiredFields.allSatisfy { !values.value(for: $0).trimmed.isEmpty }
             },
@@ -46,12 +49,12 @@ enum PAMModuleConfiguration {
     }
 
     private static let metadataFields: [ProjectMetadataField] = [
-        ProjectMetadataField(id: PAMMetadataFieldID.opcode, title: Strings.ProjectSetup.opcode, isRequired: true, csvAliases: ["opcode", "op code", "operation code"]),
-        ProjectMetadataField(id: PAMMetadataFieldID.date, title: Strings.ProjectSetup.dateDeployed, isRequired: true, valueType: .date, csvAliases: ["date deployed", "deployment date", "deploy date", "sample date", "date"]),
-        ProjectMetadataField(id: PAMMetadataFieldID.dateRetrieved, title: Strings.ProjectSetup.dateRetrieved, isRequired: true, valueType: .date, csvAliases: ["date retrieved", "retrieval date", "retrieve date", "recovery date", "date recovered"]),
-        ProjectMetadataField(id: PAMMetadataFieldID.location, title: Strings.ProjectSetup.location, isRequired: true, csvAliases: ["location", "site", "station"]),
-        ProjectMetadataField(id: PAMMetadataFieldID.depth, title: Strings.ProjectSetup.depth, isRequired: true, valueType: .number, csvAliases: ["depth", "water depth"]),
-        ProjectMetadataField(id: PAMMetadataFieldID.bottomType, title: Strings.ProjectSetup.bottomType, isRequired: false, csvAliases: ["bottom type", "substrate", "habitat"])
+        ProjectMetadataField(id: PAMMetadataFieldID.opcode, title: PAMStrings.ProjectSetup.opcode, isRequired: true, csvAliases: ["opcode", "op code", "operation code"]),
+        ProjectMetadataField(id: PAMMetadataFieldID.date, title: PAMStrings.ProjectSetup.dateDeployed, isRequired: true, valueType: .date, csvAliases: ["date deployed", "deployment date", "deploy date", "sample date", "date"]),
+        ProjectMetadataField(id: PAMMetadataFieldID.dateRetrieved, title: PAMStrings.ProjectSetup.dateRetrieved, isRequired: true, valueType: .date, csvAliases: ["date retrieved", "retrieval date", "retrieve date", "recovery date", "date recovered"]),
+        ProjectMetadataField(id: PAMMetadataFieldID.location, title: PAMStrings.ProjectSetup.location, isRequired: true, csvAliases: ["location", "site", "station"]),
+        ProjectMetadataField(id: PAMMetadataFieldID.depth, title: PAMStrings.ProjectSetup.depth, isRequired: true, valueType: .number, csvAliases: ["depth", "water depth"]),
+        ProjectMetadataField(id: PAMMetadataFieldID.bottomType, title: PAMStrings.ProjectSetup.bottomType, isRequired: false, csvAliases: ["bottom type", "substrate", "habitat"])
     ]
 
     private static func applyMetadata(_ values: ProjectMetadataValues, _ project: Project) {
@@ -103,6 +106,7 @@ enum PAMProjectFileNames {
 enum PAMMediaFileExtensions {
     nonisolated static let audio: Set<String> = ["wav", "wave"]
     nonisolated static let previewAudio: Set<String> = ["wav", "wave", "aif", "aiff", "flac", "mp3", "m4a", "caf"]
+    nonisolated static let previewImages: Set<String> = ["png", "jpg", "jpeg"]
     nonisolated static let pamguardDatabase: Set<String> = ["sqlite", "sqlite3", "db"]
     nonisolated static let pamguardBinary: Set<String> = ["pgdf", "pgnf", "pgdx"]
 }
