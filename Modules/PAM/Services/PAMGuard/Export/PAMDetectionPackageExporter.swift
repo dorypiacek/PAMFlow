@@ -1,0 +1,664 @@
+// 
+//  PAMDetectionPackageExporter.swift
+//  PAMFlow
+// 
+//  Created by Dory on 29/07/2026.
+// 
+
+import AppKit
+import UI
+import Core
+import AVFoundation
+import Foundation
+
+private enum PAMExportFileNames {
+    static let samplesCSV = "samples.csv"
+    static let detectionEventsCSV = "detection_events.csv"
+    static let samplesDirectory = "samples"
+    static let spectrogramsDirectory = "spectrograms"
+    static let ravenSelectionExtension = "selections.txt"
+    static let spectrogramImageExtension = "png"
+}
+
+private enum PAMExportSeparators {
+    static let comma = ","
+    static let tab = "\t"
+    static let newline = "\n"
+    static let carriageReturn = "\r"
+    static let fieldList = "; "
+}
+
+private enum PAMExportMetadataKey {
+    static let file = "File"
+    static let startTime = "Start time"
+    static let endTime = "End time"
+    static let evidenceTypes = "Evidence types"
+    static let clickCount = "Click count"
+    static let clickBoutCount = "Click bout count"
+    static let clickTrainCount = "Click train count"
+    static let whistleCount = "Whistle count"
+    static let lowFrequency = "Low frequency"
+    static let highFrequency = "High frequency"
+    static let secondsSuffix = " s"
+}
+
+private enum PAMExportMetadataField {
+    static let dateDeployed = "dateDeployed"
+    static let dateRetrieved = "dateRetrieved"
+    static let location = "location"
+    static let depth = "depth"
+    static let bottomType = "bottomType"
+    static let sampleRateHz = "sampleRateHz"
+    static let channels = "channels"
+    static let durationSeconds = "durationSeconds"
+}
+
+private enum ProjectExportFieldID {
+    static let eventID = "event_id"
+    static let fileID = "file_id"
+    static let eventStartSeconds = "event_start_seconds"
+    static let eventEndSeconds = "event_end_seconds"
+    static let score = "score"
+    static let evidenceTypes = "evidence_types"
+    static let detectors = "detectors"
+    static let clickCount = "click_count"
+    static let clickBoutCount = "click_bout_count"
+    static let clickTrainCount = "click_train_count"
+    static let whistleCount = "whistle_count"
+    static let qualityFlags = "quality_flags"
+    static let reviewStatus = "review_status"
+    static let detectionID = "detection_id"
+    static let opcode = "opcode"
+    static let deploymentDate = "deployment_date"
+    static let retrievalDate = "retrieval_date"
+    static let location = "location"
+    static let depth = "depth"
+    static let bottomType = "bottom_type"
+    static let waterTemperature = "water_temperature"
+    static let fileName = "file_name"
+    static let relativePath = "relative_path"
+    static let sourceMedia = "source_media"
+    static let processedBy = "processed_by"
+    static let decision = "decision"
+    static let reason = "reason"
+    static let speciesFamily = "species_family"
+    static let speciesGenus = "species_genus"
+    static let speciesName = "species_name"
+    static let speciesFullName = "species_full_name"
+    static let durationSeconds = "duration_seconds"
+    static let clipStartSeconds = "clip_start_seconds"
+    static let clipDurationSeconds = "clip_duration_seconds"
+    static let sampleRateHz = "sample_rate_hz"
+    static let channels = "channels"
+    static let bitDepth = "bit_depth"
+    static let peakDBFS = "peak_dbfs"
+    static let rmsDBFS = "rms_dbfs"
+    static let detector = "detector"
+    static let frameNumber = "frame_number"
+    static let trackID = "track_id"
+    static let maxN = "max_n"
+    static let confidence = "confidence"
+    static let frameCount = "frame_count"
+    static let frameRate = "frame_rate"
+    static let width = "width"
+    static let height = "height"
+    static let format = "format"
+    static let sizeBytes = "size_bytes"
+    static let qualityFlag = "quality_flag"
+    static let qualityReasons = "quality_reasons"
+}
+
+struct PAMDetectionPackageExporter {
+    let project: Project
+    let summary: ProjectScanSummary
+    let decisions: [ManualAuditDecision]
+    let processedBy: String
+
+    private var decisionsByPath: [String: ManualAuditDecision] {
+        Dictionary(uniqueKeysWithValues: decisions.map { ($0.fileRelativePath, $0) })
+    }
+
+    func writePackage(to packageURL: URL) throws {
+        let inputFolderURL = project.inputFolderURL
+        let accessedInput = inputFolderURL?.startAccessingSecurityScopedResource() ?? false
+        defer {
+            if accessedInput {
+                inputFolderURL?.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: packageURL, withIntermediateDirectories: true)
+
+        let samples = sampleRows()
+        let events = eventRows(samples: samples)
+        try csv(rows: samples.map(\.csvValues), header: PAMSampleRow.csvHeader)
+            .write(to: packageURL.appendingPathComponent(PAMExportFileNames.samplesCSV), atomically: true, encoding: .utf8)
+        try csv(rows: events.map(\.csvValues), header: PAMEventRow.csvHeader)
+            .write(to: packageURL.appendingPathComponent(PAMExportFileNames.detectionEventsCSV), atomically: true, encoding: .utf8)
+        try writeSampleFolders(samples: samples, events: events, packageURL: packageURL)
+    }
+
+    private func sampleRows() -> [PAMSampleRow] {
+        let sourceFiles = audioSourceFiles()
+        let eventsBySample = Dictionary(grouping: summary.files, by: sampleID(for:))
+        let sampleIDs = Set(sourceFiles.map(\.sampleID)).union(eventsBySample.keys)
+
+        return sampleIDs.sorted().map { sampleID in
+            let source = sourceFiles.first { $0.sampleID == sampleID }
+            let eventFiles = eventsBySample[sampleID] ?? []
+            let decisions = eventFiles.compactMap { decisionsByPath[$0.relativePath] }
+            let confirmedCount = decisions.filter { $0.decision == .valid }.count
+            let originalCount = eventFiles.reduce(0) { $0 + detectionCount(for: $1) }
+            let exclusionReason: String
+            if source == nil {
+                exclusionReason = PAMStrings.ExportPackage.sourceRecordingNotFound
+            } else if eventFiles.isEmpty {
+                exclusionReason = PAMStrings.ExportPackage.noGroupedDetectionEvents
+            } else {
+                exclusionReason = decisions
+                    .filter { $0.decision != .valid && !$0.notes.isEmpty }
+                    .map(\.notes)
+                    .uniqueStrings()
+                    .joined(separator: PAMExportSeparators.fieldList)
+            }
+
+            return PAMSampleRow(
+                sampleID: sampleID,
+                opcode: project.pamMetadataOpcode ?? "",
+                recordingFile: source?.url.lastPathComponent ?? eventFiles.first?.pamSourceMedia ?? sampleID,
+                metadata: sampleMetadata(source: source),
+                processedBy: processedBy,
+                processingStatus: source == nil ? PAMStrings.ExportPackage.unprocessedStatus : PAMStrings.ExportPackage.processedStatus,
+                originalDetectionCount: originalCount,
+                confirmedDetectionCount: confirmedCount,
+                exclusionReason: exclusionReason,
+                sourceURL: source?.url,
+                sampleRateHz: source?.sampleRateHz ?? eventFiles.first?.sampleRateHz.map(Double.init)
+            )
+        }
+    }
+
+    private func eventRows(samples: [PAMSampleRow]) -> [PAMEventRow] {
+        let sampleByID = Dictionary(uniqueKeysWithValues: samples.map { ($0.sampleID, $0) })
+        return summary.files.sorted { lhs, rhs in
+            let leftSample = sampleID(for: lhs)
+            let rightSample = sampleID(for: rhs)
+            if leftSample == rightSample {
+                return startOffset(for: lhs) < startOffset(for: rhs)
+            }
+            return leftSample.localizedStandardCompare(rightSample) == .orderedAscending
+        }
+        .map { file in
+            let decision = decisionsByPath[file.relativePath]
+            let sampleID = sampleID(for: file)
+            let sample = sampleByID[sampleID]
+            let startOffset = startOffset(for: file)
+            let endOffset = endOffset(for: file)
+            let startDate = dateTimeUTC(sample: sample, offset: startOffset)
+            let endDate = dateTimeUTC(sample: sample, offset: endOffset)
+            return PAMEventRow(
+                eventID: eventID(for: file),
+                sampleID: sampleID,
+                opcode: project.pamMetadataOpcode ?? "",
+                recordingFile: sample?.recordingFile ?? file.pamSourceMedia ?? "",
+                channel: channel(for: file),
+                startDateTimeUTC: startDate,
+                endDateTimeUTC: endDate,
+                startOffsetSeconds: startOffset,
+                endOffsetSeconds: endOffset,
+                durationSeconds: max(0, endOffset - startOffset),
+                detectorType: detectorType(for: file),
+                detectionCount: detectionCount(for: file),
+                minFrequencyHz: frequencyLowerBound(for: file, sampleRateHz: sample?.sampleRateHz),
+                maxFrequencyHz: frequencyUpperBound(for: file, sampleRateHz: sample?.sampleRateHz),
+                processedBy: processedBy,
+                reviewStatus: decision == nil ? Strings.Common.unreviewed : Strings.Common.reviewed,
+                eventValidity: decision?.decision.title ?? "",
+                reviewer: decision == nil ? "" : processedBy,
+                notes: decision?.notes ?? "",
+                sourceFile: file
+            )
+        }
+    }
+
+    private func writeSampleFolders(samples: [PAMSampleRow], events: [PAMEventRow], packageURL: URL) throws {
+        let samplesURL = packageURL.appendingPathComponent(PAMExportFileNames.samplesDirectory, isDirectory: true)
+        try FileManager.default.createDirectory(at: samplesURL, withIntermediateDirectories: true)
+        let eventsBySample = Dictionary(grouping: events, by: \.sampleID)
+
+        for sample in samples where eventsBySample[sample.sampleID]?.isEmpty == false {
+            let sampleFolder = samplesURL.appendingPathComponent(sanitizePathComponent(sample.sampleID), isDirectory: true)
+            let spectrogramFolder = sampleFolder.appendingPathComponent(PAMExportFileNames.spectrogramsDirectory, isDirectory: true)
+            try FileManager.default.createDirectory(at: spectrogramFolder, withIntermediateDirectories: true)
+
+            if let sourceURL = sample.sourceURL {
+                let destination = sampleFolder.appendingPathComponent(sourceURL.lastPathComponent)
+                if !FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.copyItem(at: sourceURL, to: destination)
+                }
+            }
+
+            let sampleEvents = eventsBySample[sample.sampleID] ?? []
+            try ravenSelectionTable(events: sampleEvents, sample: sample)
+                .write(
+                    to: sampleFolder.appendingPathComponent("\(sanitizePathComponent(sample.sampleID)).\(PAMExportFileNames.ravenSelectionExtension)"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+
+            for event in sampleEvents {
+                let imageName = "\(sanitizePathComponent(event.eventID))_\(decimal(event.startOffsetSeconds))-\(decimal(event.endOffsetSeconds)).\(PAMExportFileNames.spectrogramImageExtension)"
+                try renderSpectrogram(
+                    event: event,
+                    sample: sample,
+                    to: spectrogramFolder.appendingPathComponent(imageName)
+                )
+            }
+        }
+    }
+
+    private func renderSpectrogram(event: PAMEventRow, sample: PAMSampleRow, to url: URL) throws {
+        guard let sourceURL = sample.sourceURL else { return }
+        let preview = try AudioPreviewService().loadPreview(
+            from: sourceURL,
+            clipStartSeconds: event.startOffsetSeconds,
+            clipDurationSeconds: max(1, event.durationSeconds)
+        )
+        let size = CGSize(width: 3600, height: 2200)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+
+        let title = "\(event.eventID) | \(event.detectorType)"
+        let subtitle = "\(decimal(event.startOffsetSeconds))-\(decimal(event.endOffsetSeconds)) s | \(frequencyLabel(low: event.minFrequencyHz, high: event.maxFrequencyHz))"
+        title.draw(at: CGPoint(x: 144, y: 2056), withAttributes: [
+            .font: NSFont.boldSystemFont(ofSize: 60),
+            .foregroundColor: NSColor.labelColor
+        ])
+        subtitle.draw(at: CGPoint(x: 144, y: 1968), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 44),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ])
+
+        drawSpectrogram(
+            preview.spectrogramBins,
+            maxFrequencyHz: preview.spectrogramMaxFrequencyHz,
+            rect: CGRect(x: 144, y: 184, width: 3312, height: 1680)
+        )
+        image.unlockFocus()
+
+        guard let data = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: data),
+              let png = bitmap.representation(using: .png, properties: [.compressionFactor: 0.9]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try png.write(to: url, options: .atomic)
+    }
+
+    private func drawSpectrogram(_ bins: [[Float]], maxFrequencyHz: Double, rect: CGRect) {
+        NSColor(calibratedRed: 0.02, green: 0.01, blue: 0.06, alpha: 1).setFill()
+        NSBezierPath(rect: rect).fill()
+        guard let firstColumn = bins.first, !firstColumn.isEmpty else { return }
+
+        let maxFrequency = max(maxFrequencyHz, 1)
+        let columns = min(bins.count, Int(rect.width))
+        let rows = min(firstColumn.count, Int(rect.height))
+        let cellWidth = rect.width / CGFloat(columns)
+        let cellHeight = rect.height / CGFloat(rows)
+
+        for column in 0..<columns {
+            let sourceColumn = min(bins.count - 1, column * bins.count / columns)
+            for row in 0..<rows {
+                let sourceRow = min(firstColumn.count - 1, row * firstColumn.count / rows)
+                spectrogramColor(Double(bins[sourceColumn][sourceRow])).setFill()
+                NSBezierPath(rect: NSRect(
+                    x: rect.minX + CGFloat(column) * cellWidth,
+                    y: rect.minY + CGFloat(row) * cellHeight,
+                    width: cellWidth + 0.5,
+                    height: cellHeight + 0.5
+                )).fill()
+            }
+        }
+
+        NSColor.black.setStroke()
+        NSBezierPath(rect: rect).stroke()
+        let axisAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 36, weight: .semibold),
+            .foregroundColor: NSColor.labelColor
+        ]
+        PAMStrings.ExportPackage.timeAxis.draw(at: CGPoint(x: rect.midX - 68, y: 84), withAttributes: axisAttributes)
+        PAMStrings.ExportPackage.frequencyAxis.draw(at: CGPoint(x: rect.minX, y: rect.maxY + 36), withAttributes: axisAttributes)
+        for tick in spectrogramFrequencyTicks(maxFrequency: maxFrequency) {
+            let y = rect.minY + rect.height * CGFloat(tick / maxFrequency)
+            spectrogramFrequencyLabel(tick).draw(at: CGPoint(x: 24, y: y - 18), withAttributes: axisAttributes)
+        }
+    }
+
+    private func spectrogramColor(_ value: Double) -> NSColor {
+        let stops: [(Double, Double, Double)] = [
+            (0.04, 0.02, 0.12),
+            (0.16, 0.05, 0.34),
+            (0.46, 0.08, 0.55),
+            (0.86, 0.24, 0.45),
+            (1.00, 0.55, 0.22),
+            (1.00, 0.92, 0.60)
+        ]
+        let clamped = pow(min(1, max(0, value)), 0.55)
+        let scaled = clamped * Double(stops.count - 1)
+        let lower = min(Int(scaled), stops.count - 2)
+        let fraction = scaled - Double(lower)
+        let a = stops[lower]
+        let b = stops[lower + 1]
+        return NSColor(
+            calibratedRed: a.0 + (b.0 - a.0) * fraction,
+            green: a.1 + (b.1 - a.1) * fraction,
+            blue: a.2 + (b.2 - a.2) * fraction,
+            alpha: 1
+        )
+    }
+
+    private func spectrogramFrequencyTicks(maxFrequency: Double) -> [Double] {
+        guard maxFrequency > 0 else { return [] }
+        let step = maxFrequency >= 100_000 ? 50_000.0 : maxFrequency >= 40_000 ? 10_000.0 : 5_000.0
+        var ticks = stride(from: 0.0, through: maxFrequency, by: step).map { $0 }
+        if ticks.last.map({ abs($0 - maxFrequency) > step * 0.2 }) ?? true {
+            ticks.append(maxFrequency)
+        }
+        return ticks
+    }
+
+    private func spectrogramFrequencyLabel(_ frequency: Double) -> String {
+        if frequency >= 1_000 {
+            "\(Int(frequency / 1_000))k"
+        } else {
+            "\(Int(frequency))"
+        }
+    }
+
+    private func ravenSelectionTable(events: [PAMEventRow], sample: PAMSampleRow) -> String {
+        let header = PAMStrings.ExportPackage.ravenHeader
+        let rows = events.enumerated().map { index, event in
+            [
+                "\(index + 1)",
+                PAMStrings.ExportPackage.spectrogramView,
+                event.channel,
+                decimal(event.startOffsetSeconds),
+                decimal(event.endOffsetSeconds),
+                decimal(event.minFrequencyHz),
+                decimal(event.maxFrequencyHz),
+                sample.recordingFile,
+                event.eventID,
+                event.detectorType,
+                event.reviewStatus
+            ].map(sanitizeCell).joined(separator: PAMExportSeparators.tab)
+        }
+        return ([header.joined(separator: PAMExportSeparators.tab)] + rows)
+            .joined(separator: PAMExportSeparators.newline) + PAMExportSeparators.newline
+    }
+
+    private func csv(rows: [[String]], header: [String]) -> String {
+        ([header] + rows)
+            .map { $0.map(csvEscape).joined(separator: PAMExportSeparators.comma) }
+            .joined(separator: PAMExportSeparators.newline) + PAMExportSeparators.newline
+    }
+
+    private func audioSourceFiles() -> [PAMAudioSource] {
+        guard let inputFolderURL = project.inputFolderURL else { return [] }
+        let urls = (FileManager.default.enumerator(at: inputFolderURL, includingPropertiesForKeys: [.isRegularFileKey])?
+            .compactMap { $0 as? URL }
+            .filter { url in
+                ((try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true) &&
+                    PAMMediaFileExtensions.audio.contains(url.pathExtension.lowercased())
+            } ?? [])
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        return urls.map { url in
+            let file = try? AVAudioFile(forReading: url)
+            return PAMAudioSource(
+                sampleID: url.deletingPathExtension().lastPathComponent,
+                url: url,
+                durationSeconds: file.map { Double($0.length) / $0.processingFormat.sampleRate },
+                sampleRateHz: file?.processingFormat.sampleRate,
+                channels: file.map { Int($0.processingFormat.channelCount) }
+            )
+        }
+    }
+
+    private func sampleMetadata(source: PAMAudioSource?) -> [String: String] {
+        [
+            PAMExportMetadataField.dateDeployed: project.pamMetadataDate ?? "",
+            PAMExportMetadataField.dateRetrieved: project.pamMetadataDateRetrieved ?? "",
+            PAMExportMetadataField.location: project.pamMetadataLocation ?? "",
+            PAMExportMetadataField.depth: project.pamMetadataDepth ?? "",
+            PAMExportMetadataField.bottomType: project.pamMetadataBottomType ?? "",
+            PAMExportMetadataField.sampleRateHz: source?.sampleRateHz.map { decimal($0) } ?? "",
+            PAMExportMetadataField.channels: source?.channels.map(String.init) ?? "",
+            PAMExportMetadataField.durationSeconds: source?.durationSeconds.map { decimal($0) } ?? ""
+        ]
+    }
+
+    private func sampleID(for file: ProjectScanFile) -> String {
+        let source = file.pamSourceMedia ?? metadataValue(file, key: PAMExportMetadataKey.file)
+        return URL(fileURLWithPath: source.isEmpty ? file.relativePath : source).deletingPathExtension().lastPathComponent
+    }
+
+    private func eventID(for file: ProjectScanFile) -> String {
+        file.relativePath
+            .replacingOccurrences(of: "pamguard/events/", with: "")
+            .replacingOccurrences(of: "pamguard/detections/", with: "")
+    }
+
+    private func startOffset(for file: ProjectScanFile) -> Double {
+        double(metadataValue(file, key: PAMExportMetadataKey.startTime)) ?? file.clipStartSeconds ?? 0
+    }
+
+    private func endOffset(for file: ProjectScanFile) -> Double {
+        if let value = double(metadataValue(file, key: PAMExportMetadataKey.endTime)) {
+            return value
+        }
+        return startOffset(for: file) + (file.durationSeconds ?? file.clipDurationSeconds ?? 0)
+    }
+
+    private func detectorType(for file: ProjectScanFile) -> String {
+        let detectors = metadataValue(file, key: Strings.ExportFields.detectors)
+        if !detectors.isEmpty { return detectors }
+        return file.format ?? ""
+    }
+
+    private func detectionCount(for file: ProjectScanFile) -> Int {
+        let counts = [
+            int(metadataValue(file, key: PAMExportMetadataKey.clickCount)),
+            int(metadataValue(file, key: PAMExportMetadataKey.clickTrainCount)),
+            int(metadataValue(file, key: PAMExportMetadataKey.whistleCount))
+        ].compactMap { $0 }
+        return max(counts.reduce(0, +), 1)
+    }
+
+    private func channel(for file: ProjectScanFile) -> String {
+        file.channels.map(String.init) ?? "1"
+    }
+
+    private func frequencyLowerBound(for file: ProjectScanFile, sampleRateHz: Double?) -> Double {
+        double(metadataValue(file, key: PAMExportMetadataKey.lowFrequency)) ?? 0
+    }
+
+    private func frequencyUpperBound(for file: ProjectScanFile, sampleRateHz: Double?) -> Double {
+        double(metadataValue(file, key: PAMExportMetadataKey.highFrequency)) ?? sampleRateHz.map { $0 / 2 } ?? Double(file.sampleRateHz ?? 0) / 2
+    }
+
+    private func dateTimeUTC(sample: PAMSampleRow?, offset: Double) -> String {
+        guard let recordingFile = sample?.recordingFile,
+              let date = recordingStartDate(from: recordingFile) else { return "" }
+        return Self.isoFormatter.string(from: date.addingTimeInterval(offset))
+    }
+
+    private func recordingStartDate(from fileName: String) -> Date? {
+        let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+        for pattern in ["yyyyMMdd_HHmmss", "yyyy-MM-dd_HH-mm-ss", "yyyyMMdd-HHmmss"] {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = pattern
+            if let match = stem.range(of: #"(\d{8}[_-]\d{6}|\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})"#, options: .regularExpression),
+               let date = formatter.date(from: String(stem[match])) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private func metadataValue(_ file: ProjectScanFile, key: String) -> String {
+        let prefix = "\(key):"
+        return file.qualityReasons
+            .first { $0.lowercased().hasPrefix(prefix.lowercased()) }
+            .map { String($0.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+    }
+
+    private func double(_ value: String) -> Double? {
+        Double(value.replacingOccurrences(of: PAMExportMetadataKey.secondsSuffix, with: "").trimmed)
+    }
+
+    private func int(_ value: String) -> Int? {
+        Int(value.trimmed)
+    }
+
+    private func decimal(_ value: Double) -> String {
+        Self.posixNumberFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
+
+    private func frequencyLabel(low: Double, high: Double) -> String {
+        "\(decimal(low))-\(decimal(high)) Hz"
+    }
+
+    private func csvEscape(_ value: String) -> String {
+        let sanitized = sanitizeCell(value)
+        let escaped = sanitized.replacingOccurrences(of: "\"", with: "\"\"")
+        return sanitized.contains(PAMExportSeparators.comma) || sanitized.contains("\"") ? "\"\(escaped)\"" : sanitized
+    }
+
+    private func sanitizeCell(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: PAMExportSeparators.tab, with: " ")
+            .replacingOccurrences(of: PAMExportSeparators.newline, with: " ")
+            .replacingOccurrences(of: PAMExportSeparators.carriageReturn, with: " ")
+    }
+
+    private func sanitizePathComponent(_ value: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/:")
+            .union(.newlines)
+        let sanitized = value.components(separatedBy: invalid).joined(separator: "_")
+        return sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? PAMStrings.ExportPackage.fallbackSampleName : sanitized
+    }
+
+    private static var isoFormatter: ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }
+
+    private static var posixNumberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 6
+        formatter.minimumFractionDigits = 0
+        formatter.usesGroupingSeparator = false
+        return formatter
+    }
+}
+
+private struct PAMAudioSource {
+    let sampleID: String
+    let url: URL
+    let durationSeconds: Double?
+    let sampleRateHz: Double?
+    let channels: Int?
+}
+
+private struct PAMSampleRow {
+    static let csvHeader = PAMStrings.ExportPackage.sampleCSVHeader
+
+    let sampleID: String
+    let opcode: String
+    let recordingFile: String
+    let metadata: [String: String]
+    let processedBy: String
+    let processingStatus: String
+    let originalDetectionCount: Int
+    let confirmedDetectionCount: Int
+    let exclusionReason: String
+    let sourceURL: URL?
+    let sampleRateHz: Double?
+
+    var csvValues: [String] {
+        [
+            sampleID,
+            opcode,
+            recordingFile,
+            metadata[PAMExportMetadataField.dateDeployed] ?? "",
+            metadata[PAMExportMetadataField.dateRetrieved] ?? "",
+            metadata[PAMExportMetadataField.location] ?? "",
+            metadata[PAMExportMetadataField.depth] ?? "",
+            metadata[PAMExportMetadataField.bottomType] ?? "",
+            metadata[PAMExportMetadataField.sampleRateHz] ?? "",
+            metadata[PAMExportMetadataField.channels] ?? "",
+            metadata[PAMExportMetadataField.durationSeconds] ?? "",
+            processedBy,
+            processingStatus,
+            "\(originalDetectionCount)",
+            "\(confirmedDetectionCount)",
+            exclusionReason
+        ]
+    }
+}
+
+private struct PAMEventRow {
+    static let csvHeader = PAMStrings.ExportPackage.eventCSVHeader
+
+    let eventID: String
+    let sampleID: String
+    let opcode: String
+    let recordingFile: String
+    let channel: String
+    let startDateTimeUTC: String
+    let endDateTimeUTC: String
+    let startOffsetSeconds: Double
+    let endOffsetSeconds: Double
+    let durationSeconds: Double
+    let detectorType: String
+    let detectionCount: Int
+    let minFrequencyHz: Double
+    let maxFrequencyHz: Double
+    let processedBy: String
+    let reviewStatus: String
+    let eventValidity: String
+    let reviewer: String
+    let notes: String
+    let sourceFile: ProjectScanFile
+
+    var csvValues: [String] {
+        [
+            eventID,
+            sampleID,
+            opcode,
+            recordingFile,
+            channel,
+            startDateTimeUTC,
+            endDateTimeUTC,
+            String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), startOffsetSeconds),
+            String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), endOffsetSeconds),
+            String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), durationSeconds),
+            detectorType,
+            "\(detectionCount)",
+            String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), minFrequencyHz),
+            String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), maxFrequencyHz),
+            processedBy,
+            reviewStatus,
+            eventValidity,
+            reviewer,
+            notes
+        ]
+    }
+}
