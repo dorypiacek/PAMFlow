@@ -144,6 +144,37 @@ Project folders are created beside the selected raw data whenever possible. If t
 
 Project scanning is implemented natively in the macOS app. PAMFlow does not require a separate Python scanner for PAM, BRUV, or RUV project scans.
 
+## Species Taxonomy
+
+PAMFlow uses a bundled offline taxonomy file at `App/Resources/species.json` for species assignment. The app does not call WoRMS at runtime and does not import taxonomy records into SwiftData.
+
+Each taxonomy record contains:
+
+- stable WoRMS AphiaID as `id`
+- scientific name
+- genus
+- family
+- common English name when available
+- taxon group
+
+Review decisions store only the selected `speciesID` plus denormalized display strings for export and backwards compatibility. Species details are resolved through the in-memory taxonomy service when the UI needs to show them.
+
+### Downloading From WoRMS
+
+Download before the first run and refresh the bundled taxonomy manually when needed:
+
+```bash
+scripts/update_species_taxonomy.py
+```
+
+To fetch a custom set of WoRMS clades without editing the script, pass `--taxon GROUP:NAME` one or more times:
+
+```bash
+scripts/update_species_taxonomy.py \
+  --taxon elasmobranch:Elasmobranchii \
+  --taxon odontocete:Odontoceti
+```
+
 ## Requirements
 
 - macOS on Apple Silicon

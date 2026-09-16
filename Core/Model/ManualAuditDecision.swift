@@ -38,6 +38,7 @@ public final class ManualAuditDecision {
     public var speciesGenus: String?
     public var speciesName: String?
     public var speciesFullName: String?
+    public var speciesID: Int?
     public var speciesSelectionsJSON: String?
     public var isRemovedFromExport: Bool?
     public var userMaxN: Int?
@@ -61,6 +62,7 @@ public final class ManualAuditDecision {
         self.speciesGenus = nil
         self.speciesName = nil
         self.speciesFullName = nil
+        self.speciesID = nil
         self.speciesSelectionsJSON = nil
         self.isRemovedFromExport = nil
         self.userMaxN = nil
