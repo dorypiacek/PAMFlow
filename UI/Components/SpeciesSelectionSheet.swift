@@ -11,13 +11,22 @@ import Core
 /// Optional species metadata attached to one reviewed detection.
 public struct SpeciesSelection: Codable, Equatable, Identifiable {
     public var id: String = UUID().uuidString
+    public var speciesID: Int?
     public var family: String?
     public var genus: String?
     public var species: String?
     public var fullName: String
 
-    public init(id: String = UUID().uuidString, family: String?, genus: String?, species: String?, fullName: String) {
+    public init(
+        id: String = UUID().uuidString,
+        speciesID: Int? = nil,
+        family: String?,
+        genus: String?,
+        species: String?,
+        fullName: String
+    ) {
         self.id = id
+        self.speciesID = speciesID
         self.family = family
         self.genus = genus
         self.species = species
@@ -72,9 +81,9 @@ public struct SpeciesSelectionSheet: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.large) {
+        VStack(alignment: .leading, spacing: Spacing.medium) {
             header
-            VStack(alignment: .leading, spacing: Spacing.small + Spacing.xSmall) {
+            VStack(alignment: .leading, spacing: Spacing.small) {
                 tableHeader
                 ForEach(drafts.indices, id: \.self) { index in
                     SpeciesAssignmentRow(draft: $drafts[index], taxa: taxa)
@@ -112,7 +121,7 @@ public struct SpeciesSelectionSheet: View {
     }
 
     private var tableHeader: some View {
-        HStack(spacing: Spacing.medium) {
+        HStack(spacing: Spacing.small) {
             Text(Strings.SpeciesSelection.item)
                 .frame(width: Metrics.Layout.speciesTrackColumnWidth, alignment: .leading)
             Text(Strings.SpeciesSelection.score)
@@ -133,14 +142,13 @@ private struct SpeciesAssignmentRow: View {
     public let taxa: [SpeciesTaxon]
 
     @State private var searchText = ""
-    @State private var hoveredTaxonID: String?
     @State private var isShowingTaxonomy = false
     @State private var family: String?
     @State private var genus: String?
     @State private var species: String?
 
     public var body: some View {
-        HStack(alignment: .top, spacing: Spacing.medium) {
+        HStack(alignment: .center, spacing: Spacing.small) {
             idCell
             confidenceCell
             speciesField
@@ -157,30 +165,37 @@ private struct SpeciesAssignmentRow: View {
     private var idCell: some View {
         Text(draft.primaryLabel)
             .monospacedDigit()
-        .frame(width: Metrics.Layout.speciesTrackColumnWidth, alignment: .leading)
+            .font(Fonts.subtitle)
+            .frame(
+                width: Metrics.Layout.speciesTrackColumnWidth,
+                height: Metrics.Layout.speciesSearchFieldHeight,
+                alignment: .leading
+            )
     }
 
     private var confidenceCell: some View {
         Text(draft.secondaryLabel)
             .monospacedDigit()
-            .frame(width: Metrics.Layout.speciesConfidenceColumnWidth, alignment: .leading)
+            .font(Fonts.subtitle)
+            .frame(
+                width: Metrics.Layout.speciesConfidenceColumnWidth,
+                height: Metrics.Layout.speciesSearchFieldHeight,
+                alignment: .leading
+            )
     }
 
     private var speciesField: some View {
-        ZStack(alignment: .topLeading) {
-            TextField(Strings.SpeciesSelection.searchPlaceholder, text: $searchText)
-                .textFieldStyle(.appGlass)
-                .disabled(draft.isRemoved)
-                .frame(maxWidth: .infinity)
-
-            if isSearching, !searchResults.isEmpty {
-                searchResultsMenu
-                    .offset(y: Metrics.Layout.speciesSearchFieldHeight + Spacing.xSmall)
-                    .zIndex(10)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: Metrics.Layout.speciesSearchFieldHeight, alignment: .topLeading)
-        .zIndex(10)
+        SearchDropdownField(
+            text: $searchText,
+            placeholder: Strings.SpeciesSelection.searchPlaceholder,
+            items: taxa,
+            itemTitle: \.displayName,
+            isEnabled: !draft.isRemoved,
+            visibleRowCount: Metrics.Layout.speciesSearchVisibleRows,
+            onSelect: select
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: Metrics.Layout.speciesSearchFieldHeight + Spacing.medium)
     }
 
     private var taxonomyButton: some View {
@@ -190,54 +205,45 @@ private struct SpeciesAssignmentRow: View {
             .frame(width: Metrics.Layout.speciesActionColumnWidth, alignment: .trailing)
     }
 
-    private var searchResultsMenu: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(searchResults) { taxon in
-                    Button { select(taxon) } label: {
-                        Text(taxon.displayName)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, Spacing.medium)
-                            .padding(.vertical, Spacing.small)
-                            .background(hoveredTaxonID == taxon.id
-                                ? AppColors.accent.opacity(Metrics.Opacity.hoverHighlight)
-                                : Color.clear)
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { hoveredTaxonID = $0 ? taxon.id : nil }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: max(Metrics.Layout.speciesSearchResultsHeight, 280))
-        .glassySurface()
-    }
-
     private var taxonomyEditor: some View {
-        VStack(spacing: Spacing.small) {
-            Picker(Strings.SpeciesSelection.family, selection: $family) {
-                Text(Strings.Common.unknown).tag(String?.none)
-                ForEach(families, id: \.self) { Text($0).tag(String?.some($0)) }
-            }
-            .onChange(of: family) { genus = nil; species = nil }
-            Picker(Strings.SpeciesSelection.genus, selection: $genus) {
-                Text(Strings.Common.unknown).tag(String?.none)
-                ForEach(genera, id: \.self) { Text($0).tag(String?.some($0)) }
-            }
-            .disabled(family == nil)
-            .onChange(of: genus) { species = nil }
-            Picker(Strings.SpeciesSelection.species, selection: $species) {
-                Text(Strings.Common.unknown).tag(String?.none)
-                ForEach(speciesOptions) { Text($0.displayName).tag(String?.some($0.species)) }
-            }
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            taxonomyPicker(title: Strings.SpeciesSelection.family, selection: $family, options: families)
+                .onChange(of: family) { genus = nil; species = nil }
+            taxonomyPicker(title: Strings.SpeciesSelection.genus, selection: $genus, options: genera)
+                .disabled(family == nil)
+                .onChange(of: genus) { species = nil }
+            taxonomyPicker(
+                title: Strings.SpeciesSelection.species,
+                selection: $species,
+                options: speciesOptions.map(\.species)
+            )
             .disabled(genus == nil)
             .onChange(of: species) { if let selectedTaxon { select(selectedTaxon) } }
         }
+        .colorScheme(.dark)
     }
 
-    private var isSearching: Bool {
-        !draft.isRemoved && !searchText.isEmpty && searchText != draft.selection?.fullName
+    private func taxonomyPicker(
+        title: String,
+        selection: Binding<String?>,
+        options: [String]
+    ) -> some View {
+        HStack(spacing: Spacing.medium) {
+            Text(title)
+                .foregroundStyle(.primary)
+                .frame(width: Metrics.Layout.speciesTaxonomyLabelWidth, alignment: .trailing)
+            Picker("", selection: selection) {
+                Text(Strings.Common.unknown).tag(String?.none)
+                ForEach(options, id: \.self) { option in
+                    Text(option).tag(String?.some(option))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
-    private var searchResults: [SpeciesTaxon] { taxa.filter { $0.matches(searchText) }.prefix(20).map { $0 } }
+
     private var families: [String] { taxa.map(\.family).uniquedForDisplay() }
     private var genera: [String] { taxa.filter { $0.family == family }.map(\.genus).uniquedForDisplay() }
     private var speciesOptions: [SpeciesTaxon] { taxa.filter { $0.family == family && $0.genus == genus } }
@@ -253,6 +259,7 @@ private struct SpeciesAssignmentRow: View {
     private func select(_ taxon: SpeciesTaxon) {
         draft.selection = SpeciesSelection(
             id: draft.selection?.id ?? UUID().uuidString,
+            speciesID: taxon.speciesID,
             family: taxon.family,
             genus: taxon.genus,
             species: taxon.species,
