@@ -236,6 +236,10 @@ To open an unnotarized build, drag PAMFlow to Applications and try opening it on
 
 These builds bundle SharkTrack inside the app. They do not require a separate SharkTrackKit runtime install.
 
+## Architecture
+
+PAMFlow is split into a small app host, shared packages, and independently owned workflow modules. The detailed architecture notes live in [Documentation/Architecture.md](Documentation/Architecture.md).
+
 ## Planned Features
 
 - Improved long-running processing resume support.
