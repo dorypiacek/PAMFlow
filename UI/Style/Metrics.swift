@@ -58,10 +58,14 @@ public enum Metrics {
         public static let chartMinimumHeight: CGFloat = 180
         public static let pickerWidth: CGFloat = 380
         public static let reasonSheetWidth: CGFloat = 520
-        public static let speciesSearchResultsHeight: CGFloat = 220
         public static let speciesSearchFieldHeight: CGFloat = 22
-        public static let speciesTrackColumnWidth: CGFloat = 72
-        public static let speciesConfidenceColumnWidth: CGFloat = 72
+        public static let speciesSearchVisibleRows = 5
+        public static let searchDropdownVisibleRows = 5
+        public static let searchDropdownRowHeight: CGFloat = 38
+        public static let speciesSearchPopoverWidth: CGFloat = 720
+        public static let speciesTaxonomyLabelWidth: CGFloat = 72
+        public static let speciesTrackColumnWidth: CGFloat = 82
+        public static let speciesConfidenceColumnWidth: CGFloat = 96
         public static let speciesActionColumnWidth: CGFloat = 44
         public static let circularToolbarButtonSize: CGFloat = 36
         public static let glassCornerRadius: CGFloat = 14

@@ -307,6 +307,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         }
 
         return SpeciesSelection(
+            speciesID: decision.speciesID,
             family: decision.speciesFamily,
             genus: decision.speciesGenus,
             species: decision.speciesName,
@@ -325,6 +326,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         }
 
         let legacySelection = SpeciesSelection(
+            speciesID: decision.speciesID,
             family: decision.speciesFamily,
             genus: decision.speciesGenus,
             species: decision.speciesName,
@@ -378,6 +380,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         var selections = speciesSelections(for: file, project: project, modelContext: modelContext)
         let normalizedSelection = SpeciesSelection(
             id: selectionID ?? selection.id,
+            speciesID: selection.speciesID,
             family: selection.family,
             genus: selection.genus,
             species: selection.species,
@@ -393,6 +396,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         decision.speciesGenus = selections.first?.genus
         decision.speciesName = selections.first?.species
         decision.speciesFullName = selections.first?.fullName.isEmpty == false ? selections.first?.fullName : nil
+        decision.speciesID = selections.first?.speciesID
         decision.speciesSelectionsJSON = try String(
             data: JSONEncoder().encode(selections),
             encoding: .utf8
@@ -416,6 +420,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         decision.speciesGenus = selections.first?.genus
         decision.speciesName = selections.first?.species
         decision.speciesFullName = selections.first?.fullName.isEmpty == false ? selections.first?.fullName : nil
+        decision.speciesID = selections.first?.speciesID
         decision.updatedAt = .now
         try modelContext.save()
     }
@@ -445,6 +450,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         decision.speciesGenus = nil
         decision.speciesName = nil
         decision.speciesFullName = nil
+        decision.speciesID = nil
         decision.speciesSelectionsJSON = nil
         decision.updatedAt = .now
         try modelContext.save()
@@ -477,6 +483,7 @@ open class ManualAuditViewModel: ManualAuditViewModelType {
         decision.speciesGenus = draft.selection?.genus
         decision.speciesName = draft.selection?.species
         decision.speciesFullName = draft.selection?.fullName
+        decision.speciesID = draft.selection?.speciesID
         decision.speciesSelectionsJSON = try draft.selection.map {
             try String(data: JSONEncoder().encode([$0]), encoding: .utf8)
         } ?? nil

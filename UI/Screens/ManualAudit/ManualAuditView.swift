@@ -21,7 +21,7 @@ public struct ManualAuditView<PreviewContent: View>: View {
         }
         return appCoordinator
     }
-    
+
     let projectID: UUID
     let startAtLastReviewed: Bool
     private let previewContent: (ManualAuditViewModel, Project, ProjectScanFile) -> PreviewContent
@@ -332,28 +332,17 @@ public struct ManualAuditView<PreviewContent: View>: View {
         isSelected: Bool,
         project: Project
     ) -> some View {
-        if isSelected {
-            Button {
+        Button {
+            withAnimation {
                 save(decision, project: project)
-            } label: {
-                decisionLabel(decision, isSelected: true)
             }
-            .buttonStyle(.primaryAction)
-            .controlSize(.regular)
-            .tint(AppColors.accent)
-            .frame(minWidth: Metrics.Layout.decisionButtonMinWidth)
-            .clipShape(.capsule)
-        } else {
-            Button {
-                save(decision, project: project)
-            } label: {
-                decisionLabel(decision, isSelected: false)
-            }
-            .buttonStyle(.prominentSecondaryAction)
-            .controlSize(.regular)
-            .frame(minWidth: Metrics.Layout.decisionButtonMinWidth)
-            .clipShape(.capsule)
+        } label: {
+            decisionLabel(decision, isSelected: isSelected)
         }
+        .buttonStyle(isSelected ? .primaryAction : .prominentSecondaryAction)
+        .controlSize(.regular)
+        .frame(minWidth: Metrics.Layout.decisionButtonMinWidth)
+        .clipShape(.capsule)
     }
 
     private func decisionLabel(
